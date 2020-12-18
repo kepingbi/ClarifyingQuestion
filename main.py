@@ -11,6 +11,7 @@ from others.logging import logger, init_logger
 from models.cq_ranker import ClarifyQuestionRanker, build_optim
 from data.data_util import GlobalConvSearchData, ConvSearchData
 from trainer import Trainer
+from rl_trainer import RLTrainer
 from data.cq_retriever_dataset import ClarifyQuestionDataset
 
 def str2bool(v):
@@ -26,8 +27,10 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', default=666, type=int)
     parser.add_argument("--train_from", default='')
-    parser.add_argument("--model_name", default='ref_transformer',
-            choices=['ref_transformer', 'plain_transformer', 'reinforce_transformer'], help="which type of model is used to train")
+    parser.add_argument("--model_name", default='plain_transformer',
+            choices=['ref_transformer', 'plain_transformer'], help="which type of model is used to train")
+    parser.add_argument("--rl", type=str2bool, nargs='?',const=True,default=False,
+            help="whether to use reinforcement learning to train.")
     parser.add_argument("--rankfname", default="test.best_model.ranklist")
     parser.add_argument("--dropout", default=0.1, type=float)
     parser.add_argument("--pos_cq_thre", default=0.8, type=float, help="")
@@ -90,6 +93,11 @@ def parse_args():
                             help="Iteration for the clarifying questions.")
     parser.add_argument("--max_hist_turn", type=int, default=3,
                             help="Iteration for the clarifying questions.")
+    parser.add_argument("--max_episode_len", type=int, default=5,
+                            help="Iteration for the clarifying questions.")
+    parser.add_argument("--gamma", type=float, default=0.9,
+                            help="Gamma for RL future reward accumulation.")
+
     parser.add_argument('--device', default='cuda', choices=['cpu', 'cuda'], help="use CUDA or cpu")
     return parser.parse_args()
 
@@ -133,7 +141,10 @@ def train(args):
 
     global_data = GlobalConvSearchData(args, args.data_dir)
     model, optim = create_model(args, args.train_from)
-    trainer = Trainer(args, model, optim)
+    if args.rl:
+        trainer = RLTrainer(args, model, optim)
+    else:
+        trainer = Trainer(args, model, optim)
     train_conv_data = ConvSearchData(args, args.input_train_dir, "train", global_data)
     valid_conv_data = ConvSearchData(args, args.input_train_dir, "valid", global_data)
     best_checkpoint_path = trainer.train(trainer.args, global_data, train_conv_data, valid_conv_data)
@@ -155,13 +166,14 @@ def validate(args):
         cur_model, _ = create_model(args, cur_model_file)
         trainer = Trainer(args, cur_model, None)
         ndcg, prec, mrr = trainer.validate(args, global_data, valid_conv_data)
-        logger.info("MRR:{} P@1:{} Model:{}".format(mrr, prec, cur_model_file))
+        logger.info("NDCG@5:{} P@5:{} MRR:{} Model:{}".format(ndcg, prec, mrr, cur_model_file))
         if ndcg > best_ndcg:
             best_ndcg = ndcg
             best_model = cur_model_file
 
     test_conv_data = ConvSearchData(args, args.input_train_dir, "test", global_data)
 
+    logger.info("Best Model: {}".format(best_model))
     best_model, _ = create_model(args, best_model)
     trainer = Trainer(args, best_model, None)
     trainer.test(args, global_data, test_conv_data, args.rankfname)

@@ -36,6 +36,8 @@ class ConvSearchData():
         #         size = (self.set_review_size, self.neg_per_pos), replace=True, p=self.product_dists)
         # construct data for a epoch, conversation history length 0, 1, 2, 3
         pass
+    def reset_set_name(self, name):
+        self.set_name = name
 
     def read_partitition(self, part_fname, is_cq=True):
         pos_unit_dic = dict()

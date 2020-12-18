@@ -61,16 +61,15 @@ class Trainer(object):
                     shuffle=True, num_workers=args.num_workers)
             pbar = tqdm(dataloader)
             pbar.set_description("[Epoch {}]".format(current_epoch))
-            time_flag = time.time()
-            for step, batch_data in enumerate(pbar):
+            for batch_data in pbar:
+                time_flag = time.time()
                 batch_data = batch_data.to(args.device)
                 get_batch_time += time.time() - time_flag
                 time_flag = time.time()
                 step_loss = self.model(batch_data)
-                if args.gradient_accumulation_steps > 1:
-                    step_loss = step_loss / args.gradient_accumulation_steps
                 step_loss.backward()
-                if (step + 1) % args.gradient_accumulation_steps == 0:
+                if (current_step + 1) % args.gradient_accumulation_steps == 0:
+                    step_loss /= args.gradient_accumulation_steps
                     self.optim.step()
                     self.optim.optimizer.zero_grad()
                     # self.model.zero_grad()
