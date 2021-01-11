@@ -49,7 +49,7 @@ class Trainer(object):
         get_batch_time = 0.0
         start_time = time.time()
         current_step = 0
-        best_ndcg = 0.
+        best_mrr = 0.
         best_checkpoint_path = ''
         for current_epoch in range(args.start_epoch+1, args.max_train_epoch+1):
             self.model.train()
@@ -92,8 +92,8 @@ class Trainer(object):
             self._save(current_epoch, checkpoint_path)
             ndcg, prec, mrr = self.validate(args, global_data, valid_conv_data)
             logger.info("Epoch {}: NDCG@5:{} P@5:{} MRR:{}".format(current_epoch, ndcg, prec, mrr))
-            if ndcg > best_ndcg:
-                best_ndcg = ndcg
+            if mrr > best_mrr:
+                best_mrr = mrr
                 best_checkpoint_path = os.path.join(model_dir, 'model_best.ckpt')
                 logger.info("Copying %s to checkpoint %s" % (checkpoint_path, best_checkpoint_path))
                 shutil.copyfile(checkpoint_path, best_checkpoint_path)
@@ -119,10 +119,12 @@ class Trainer(object):
         ndcg, prec, mrr = self.calc_metrics(sorted_tf_cq_scores, valid_conv_data.pos_cq_dic, args.rank_cutoff)
         return ndcg, prec, mrr
 
-    def test(self, args, global_data, test_conv_data, rankfname="test.best_model.ranklist", cutoff=100):
+    def test(self, args, global_data, test_conv_data, rankfname="test.best_model.ranklist"):
         k = args.eval_k
+        cutoff = args.rank_cutoff
         sorted_tf_cq_scores = self.infer_k_iter(args, global_data, test_conv_data, "Test", k, cutoff)
         self.calc_metrics(sorted_tf_cq_scores, test_conv_data.pos_cq_dic, cutoff)
+        rankfname = "%s.%diter.len%d" % (rankfname, k, cutoff)
         output_path = os.path.join(args.save_dir, rankfname)
         self.write_ranklist(output_path, sorted_tf_cq_scores, cutoff)
 
@@ -146,11 +148,12 @@ class Trainer(object):
             ranklist = [2 if x in cur_pos_dic \
                 else 1 if x in other_pos_dic else 0 for x, score in sorted_tf_cq_scores[tfid]]
             iranklist = [2] * len(cur_pos_dic) + [1] * len(other_pos_dic)
+            iranklist = iranklist[:len(ranklist)] # make them the same length
             cur_ndcg = calc_ndcg(ranklist, iranklist, pos=eval_pos)
             cur_mrr = calc_mrr(ranklist)
             ndcg += cur_ndcg
             mrr += cur_mrr
-            prec += sum([1 if x > 0 else 0 for x in ranklist[:eval_pos]]) / eval_pos
+            prec += sum([1 if x > 0 else 0 for x in ranklist[:eval_pos]]) / min(len(ranklist), eval_pos)
         eval_count = len(sorted_tf_cq_scores)
         ndcg /= eval_count
         mrr /= eval_count
@@ -197,13 +200,22 @@ class Trainer(object):
                     args, test_dataset, batch_size=args.valid_batch_size, #batch_size
                     shuffle=False, num_workers=args.num_workers)
             sorted_tf_cq_scores = self.get_entry_scores(args, dataloader, description)
-
-            end = cutoff if i == k-1 else 1
+            # print(len(sorted_tf_cq_scores), len(tf_candi_cq_dic))
             for tfid in sorted_tf_cq_scores:
                 cur_pos_dic, _ = conv_data.pos_cq_dic[tfid]
-                if sorted_tf_cq_scores[tfid][0] in cur_pos_dic:
+                if sorted_tf_cq_scores[tfid][0][0] in cur_pos_dic:
+                    # cq_id, score # tf id of the top 1 cq
                     tf_candi_cq_dic.pop(tfid, None)
                 if tfid not in tf_top_cq_dic:
                     tf_top_cq_dic[tfid] = []
+                end = cutoff - len(tf_top_cq_dic[tfid]) if i == k-1 else 1
                 tf_top_cq_dic[tfid].extend(sorted_tf_cq_scores[tfid][:end])
+        for tfid in tf_top_cq_dic:
+            cur_pos_dic, _ = conv_data.pos_cq_dic[tfid]
+            print(tf_top_cq_dic[tfid])
+            for rank in range(len(tf_top_cq_dic[tfid])):
+                print(rank, len(tf_top_cq_dic[tfid]), tf_top_cq_dic[tfid][rank])
+                if tf_top_cq_dic[tfid][rank][0] in cur_pos_dic:
+                    tf_top_cq_dic[tfid] = tf_top_cq_dic[tfid][:rank+1]
+                    break
         return tf_top_cq_dic

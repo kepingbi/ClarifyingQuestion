@@ -88,7 +88,8 @@ class GlobalConvSearchData():
         candi_doc_path = os.path.join(data_path, "candi_doc_dict.pt")
         candi_doc_psg_path = os.path.join(data_path, "candi_doc_psg_dict.pt")
         qulac_path = os.path.join(data_path, "new_qulac.json")
-        topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_doc.mu1500.ranklist")
+        # topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_doc.mu1500.ranklist")
+        topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "cq_top_doc_rerank50.ranklist")
         topic_cq_cq_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_q.ranklist")
         # self.clarify_q_dic = self.read_id_content_json(question_path)
         # self.doc_dic = self.read_id_content_json(candi_doc_path)
@@ -97,10 +98,13 @@ class GlobalConvSearchData():
         self.doc_psg_dic = torch.load(candi_doc_psg_path) # the first psg and other top ranked doc
         self.topic_dic, self.answer_dic = self.read_qulac_answer(qulac_path)
         self.cq_doc_rank_dic = self.read_topic_cq_ranklist(topic_cq_doc_rankfile)
-        # self.cq_cq_rank_dic = self.read_topic_cq_ranklist(topic_cq_cq_rankfile)
+        self.cq_cq_rank_dic = self.read_topic_cq_ranklist(topic_cq_cq_rankfile)
         self.cq_top_doc_info_dic = dict()
+        self.cq_top_cq_info_dic = dict()
         for qid in self.cq_doc_rank_dic:
             self.cq_top_doc_info_dic[qid] = {doc:rank+1 for rank,doc in enumerate(self.cq_doc_rank_dic[qid])}
+        for qid in self.cq_cq_rank_dic:
+            self.cq_top_cq_info_dic[qid] = {cq:rank+1 for rank,cq in enumerate(self.cq_cq_rank_dic[qid])}
 
         logger.info("GlobalConvSearchData loaded completely" )
     

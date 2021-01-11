@@ -133,7 +133,8 @@ class ClarifyQuestionRanker(nn.Module):
 
     def forward(self, batch_data):
         scores, candi_cq_mask = self.get_candi_cq_scores(batch_data)
-        targets = torch.FloatTensor([4,1,0]).to(self.device).unsqueeze(0).expand_as(scores)
+        # targets = torch.FloatTensor([4,1,0]).to(self.device).unsqueeze(0).expand_as(scores)
+        targets = batch_data.candi_labels # batch_size, candi_count
         loss = -self.logsoftmax(scores) * targets
         # loss = -self.logsoftmax(scores) * (targets.pow(2, a)-1)
         loss = loss * candi_cq_mask.float()

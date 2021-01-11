@@ -1,6 +1,6 @@
 from tqdm import tqdm
 from others.logging import logger
-# from data.cq_retriever_dataset import ClarifyQuestionDataset
+from data.cq_retriever_dataset import ClarifyQuestionDataset
 # from data.cq_retriever_dataloader import ClarifyQuestionDataloader
 import shutil
 import torch
@@ -40,7 +40,7 @@ class RLTrainer(Trainer):
         get_batch_time = 0.0
         start_time = time.time()
         current_step = 0
-        best_ndcg = 0.
+        best_mrr = 0.
         best_checkpoint_path = ''
         self.model.zero_grad()
         tf_ids = list(train_conv_data.candidate_cq_dic.keys())
@@ -89,8 +89,8 @@ class RLTrainer(Trainer):
             ndcg, prec, mrr = self.validate(args, global_data, valid_conv_data)
             # ndcg, prec, mrr = 0., 0., 0.
             logger.info("Epoch {}: NDCG@5:{} P@5:{} MRR:{}".format(current_epoch, ndcg, prec, mrr))
-            if ndcg > best_ndcg:
-                best_ndcg = ndcg
+            if mrr > best_mrr:
+                best_mrr = mrr
                 best_checkpoint_path = os.path.join(model_dir, 'model_best.ckpt')
                 logger.info("Copying %s to checkpoint %s" % (checkpoint_path, best_checkpoint_path))
                 shutil.copyfile(checkpoint_path, best_checkpoint_path)
@@ -172,7 +172,10 @@ class RLTrainer(Trainer):
             if cq in cur_pos_set:
                 reward = 4.
             elif cq in other_pos_set:
-                reward = 0.
+                # reward = 0.
+                hist_cqs = [x for x,y in tf_top_cq_dic[tfid]]
+                reward = - ClarifyQuestionDataset.cq_similarity(
+                    global_data.cq_doc_rank_dic, hist_cqs, cq)
             else:
                 reward = -1.
             # delta NDCG can be used as reward

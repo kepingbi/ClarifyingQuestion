@@ -34,6 +34,9 @@ class ClarifyQuestionDataloader(DataLoader):
         topic_queries = [self.global_data.topic_dic[x] for x in topic_ids]
         hist_cq_ids = [entry[1] for entry in batch] # batch_size, hist_cq_count
         candi_cq_ids = [entry[3] for entry in batch]
+        candi_labels = []
+        if len(batch[0]) > 4:
+            candi_labels = [entry[4] for entry in batch]
         candi_seg_ids, ref_doc_words, candi_cq_words = [], [], []
         for i in range(len(batch)):
             entry = batch[i]
@@ -45,6 +48,7 @@ class ClarifyQuestionDataloader(DataLoader):
                     # if this q is for other topic, it will not have corresponding answer. 
                     word_seq.extend([self.sep_vid] + self.global_data.answer_dic[topic_facet_ids[i]][cq])
             seg_id += [0] * (len(word_seq) - len(seg_id))
+            '''
             cur_ref_doc_words = []
             for doc in entry[2]:
                 orig_topic_id = "%s-X" % topic_ids[i]
@@ -55,7 +59,10 @@ class ClarifyQuestionDataloader(DataLoader):
                 cur_ref_doc_words.append([self.cls_vid] + doc_words)
             # doc_topk, word_count
             ref_doc_words.append(cur_ref_doc_words)
+            '''
             # ref_doc_words.append([[self.cls_vid] + self.global_data.doc_dic[doc] for doc in entry[2]])
+            ref_doc_words.append([[self.cls_vid] + self.global_data.clarify_q_dic[cq] for cq in entry[2]])
+
             per_candi_cq, per_candi_seg = [], []
             for cq in entry[3]: # candidate cq
                 cq_words = [self.sep_vid] + self.global_data.clarify_q_dic[cq]
@@ -72,6 +79,6 @@ class ClarifyQuestionDataloader(DataLoader):
         ref_doc_words = util.pad_3d(ref_doc_words, self.pad_vid, dim=1)
         ref_doc_words = util.pad_3d(ref_doc_words, self.pad_vid, dim=2)
         batch = ClarifyQuestionBatch(
-            topic_facet_ids, candi_cq_ids, hist_cq_ids, \
+            topic_facet_ids, candi_cq_ids, hist_cq_ids, candi_labels, \
                 candi_cq_words, candi_seg_ids, ref_doc_words)
         return batch

@@ -49,9 +49,14 @@ class ClarifyQuestionDataset(Dataset):
                 global_data.cq_doc_rank_dic, global_data.cq_top_doc_info_dic, \
                     topic, hist_cqs)
             doc_list = doc_list[:topk]
+            cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
+            cq_list = [x for x in cq_list if x not in hist_cq_set]
+            cq_list = cq_list[:10]
+
             seg_count = int((len(candi_cq_list) - 1) / candi_batch_size) + 1
             for i in range(seg_count):
-                test_data.append([topic_facet_id, hist_cqs, doc_list,
+                # test_data.append([topic_facet_id, hist_cqs, doc_list,
+                test_data.append([topic_facet_id, hist_cqs, cq_list,
                 candi_cq_list[i*candi_batch_size:(i+1)*candi_batch_size]])
 
         return test_data
@@ -64,12 +69,22 @@ class ClarifyQuestionDataset(Dataset):
         for hist_len in range(self.args.max_hist_turn):
             entries = self.select_neg_samples(prod_data, hist_len)
             for topic_facet_id, hist_cqs, pos_cq, other_cq, neg_cq in entries:
+            # for topic_facet_id, hist_cqs, pos_cq, neg_cq in entries:
                 topic, _ = topic_facet_id.split('-')
                 doc_list = self.doc_diff(
                     global_data.cq_doc_rank_dic, global_data.cq_top_doc_info_dic, \
                         topic, hist_cqs)
                 doc_list = doc_list[:topk]
-                train_data.append([topic_facet_id, hist_cqs, doc_list, [pos_cq, other_cq, neg_cq]])
+                cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
+                cq_list = [x for x in cq_list if x not in set(hist_cqs)]
+                cq_list = cq_list[:10]
+
+                # only calculate this for those with label 1
+                other_cq_sim = self.cq_similarity(global_data.cq_doc_rank_dic, hist_cqs, other_cq)
+                # train_data.append([topic_facet_id, hist_cqs, doc_list, \
+                train_data.append([topic_facet_id, hist_cqs, cq_list, \
+                    #  [pos_cq, other_cq, neg_cq], [4., 1.-other_cq_sim, 0.]])
+                     [pos_cq, other_cq, neg_cq], [4., 1., 0.]])
         return train_data
 
     def doc_diff(self, cq_doc_rank_dic, cq_top_doc_info_dic, topic, hist_cqs):
@@ -85,6 +100,18 @@ class ClarifyQuestionDataset(Dataset):
         if len(doc_list) == 0:
             doc_list = init_doc_list
         return doc_list
+
+    @staticmethod
+    def cq_similarity(cq_doc_rank_dic, hist_cqs, cur_cq, topk=20):
+        # calculate similarity based on the portion of same documents ranked in top k documents. 
+        cur_cq_ranklist = cq_doc_rank_dic[cur_cq][:topk]
+        max_sim = 0.
+        for cq in hist_cqs:
+            ranklist = cq_doc_rank_dic[cq][:topk]
+            overlap = set(cur_cq_ranklist).intersection(set(ranklist))
+            sim = len(overlap) / topk
+            max_sim = max(max_sim, sim)
+        return max_sim
 
     def select_neg_samples(self, prod_data, hist_len):
         # hist_len: 0,1,2,3
@@ -122,6 +149,9 @@ class ClarifyQuestionDataset(Dataset):
                     candi_cq_set = global_candi_set.difference(hist_cqs_set)
                 neg_cq = random.sample(candi_cq_set, 1)
                 entries.append([topic_facet_id, hist_cqs, pos_cq, other_cq[0], neg_cq[0]])
+                # entries.append([topic_facet_id, hist_cqs, pos_cq, other_cq[0]])
+                # entries.append([topic_facet_id, hist_cqs, pos_cq, neg_cq[0]])
+                # entries.append([topic_facet_id, hist_cqs, other_cq[0], neg_cq[0]])
         return entries
 
     def __len__(self):

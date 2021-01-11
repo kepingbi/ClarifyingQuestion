@@ -87,9 +87,9 @@ def parse_args():
     parser.add_argument("--mode", type=str, default="train", choices=["train", "valid", "test"])
     parser.add_argument("--doc_topk", type=int, default=3,
                             help="The number of documents used for reference.")
-    parser.add_argument("--rank_cutoff", type=int, default=100,
+    parser.add_argument("--rank_cutoff", type=int, default=5,
                             help="Rank cutoff for output ranklists.")
-    parser.add_argument("--eval_k", type=int, default=3,
+    parser.add_argument("--eval_k", type=int, default=5,
                             help="Iteration for the clarifying questions.")
     parser.add_argument("--max_hist_turn", type=int, default=3,
                             help="Iteration for the clarifying questions.")
