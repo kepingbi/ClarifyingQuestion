@@ -3,6 +3,7 @@
 import gzip
 import torch
 from others.logging import logger
+from collections import defaultdict
 
 def pad_sequences(sequences):
     lengths = [len(seq) for seq in sequences]
@@ -144,6 +145,23 @@ def pad_4d_dim2(data, pad_id, width=-1):
     for entry_dim1 in data:
         rtn_data.append([d[:width] + [[pad_id] * dim3] * (width - len(d)) \
             for d in entry_dim1])
+    return rtn_data
+
+def pad_4d_dim3(data, pad_id, width=-1):
+    #only handle padding to dim = 2
+    dim3 = 0     
+    for d_0 in data:
+        if len(d_0) > 0:
+            for d_1 in d_0:
+                if len(d_1) > 0:
+                    dim3 = max(dim3, max(len(d_2) for d_2 in d_1))
+    if width == -1:
+        width = dim3
+    #print(width)
+    rtn_data = []
+    for entry_dim1 in data:
+        rtn_data.append(pad_3d(entry_dim1, pad_id, dim=2, width=width))
+        
     return rtn_data
 
 def left_pad_4d_dim2(data, pad_id, width=-1):

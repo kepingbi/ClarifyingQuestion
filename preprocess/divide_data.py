@@ -10,6 +10,7 @@ import collections as coll
 from initial_retrieval import read_galago_ranklist
 from pytorch_pretrained_bert import BertTokenizer
 import torch
+import sys
 
 def read_qrels(qrel_file):
     # read positive document set corresponding to (query_id, facet_id)
@@ -81,7 +82,7 @@ def output_question_text(data_path, output_path):
 
 def partition_to_k_folds(qrel_dict, candi_ranklist_dic, output_dir, is_q=False, k=5):
     for i in range(1, k+1):
-        test_i = i
+        test_i = i % k
         dev_i = (i-1) % k
         fold_dir = os.path.join(output_dir, "fold_%d" % i)
         os.makedirs(fold_dir, exist_ok=True)
@@ -179,7 +180,6 @@ if __name__ == '__main__':
     doc_dir = os.path.join(args.root_dir, "clean_topic_docs")
     rank_file = os.path.join(data_path, "clarify_q_init_doc.mu1500.ranklist")
     qrel_file = os.path.join(args.root_dir, "qrels/multifacet.qrels.pos.txt")
-    '''
     topic_ranklist_dic = coll.defaultdict(list)
     read_galago_ranklist(rank_file, topic_ranklist_dic)
     qrel_dict = read_qrels(qrel_file)
@@ -202,7 +202,7 @@ if __name__ == '__main__':
     qulac_path = os.path.join(args.root_dir, "qulac/qulac.json")
     # output_question_text(qulac_path, output_path)
     partition_to_k_folds(qrel_dict, topic_ranklist_dic, output_path, is_q=True)
-    '''
+    sys.exit(0)
     doc_dict_file = "%s/candi_doc_dict.json.gz" % (output_path)
     cq_dict_file = "%s/questions.json.gz" % output_path
     bert_doc_file = os.path.join(output_path, "candi_doc_dict.pt")
@@ -211,4 +211,4 @@ if __name__ == '__main__':
     # output_bert_format(doc_dict_file, bert_doc_file)
     bert_doc_file = os.path.join(output_path, "candi_doc_psg_dict.pt")
     doc_top_psg_file = os.path.join(data_path, "topic.top_doc_psg.txt.gz")
-    output_doc_psg_bert_format(doc_dict_file, doc_top_psg_file, bert_doc_file)
+    # output_doc_psg_bert_format(doc_dict_file, doc_top_psg_file, bert_doc_file)

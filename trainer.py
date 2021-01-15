@@ -2,6 +2,10 @@ from tqdm import tqdm
 from others.logging import logger
 from data.cq_retriever_dataset import ClarifyQuestionDataset
 from data.cq_retriever_dataloader import ClarifyQuestionDataloader
+from data.init_retrieval_dataset import InitRetrievalDataset
+from data.init_retrieval_dataloader import InitRetrievalDataloader
+from data.multi_turn_dataset import MultiTurnDataset
+from data.multi_turn_dataloader import MultiTurnDataloader
 import shutil
 import torch
 import numpy as np
@@ -25,6 +29,7 @@ class Trainer(object):
         self.args = args
         self.model = model
         self.optim = optim
+        self.eval_pos = args.eval_pos
         if (model):
             n_params = _tally_parameters(model)
             logger.info('* number of parameters: %d' % n_params)
@@ -33,9 +38,16 @@ class Trainer(object):
         self.n_gpu = n_gpu
         self.gpu_rank = gpu_rank
         self.report_manager = report_manager
-
-        self.ExpDataset = ClarifyQuestionDataset
-        self.ExpDataloader = ClarifyQuestionDataloader
+        if self.args.init:
+            self.ExpDataloader = InitRetrievalDataloader
+            self.ExpDataset = InitRetrievalDataset
+        else:
+            if self.args.selector == "none":
+                self.ExpDataset = ClarifyQuestionDataset
+                self.ExpDataloader = ClarifyQuestionDataloader
+            else:
+                self.ExpDataset = MultiTurnDataset
+                self.ExpDataloader = MultiTurnDataloader
 
     def train(self, args, global_data, train_conv_data, valid_conv_data):
         """
@@ -49,7 +61,7 @@ class Trainer(object):
         get_batch_time = 0.0
         start_time = time.time()
         current_step = 0
-        best_mrr = 0.
+        best_criterion = 0.
         best_checkpoint_path = ''
         for current_epoch in range(args.start_epoch+1, args.max_train_epoch+1):
             self.model.train()
@@ -90,10 +102,13 @@ class Trainer(object):
                     start_time = time.time()
             checkpoint_path = os.path.join(model_dir, 'model_epoch_%d.ckpt' % current_epoch)
             self._save(current_epoch, checkpoint_path)
-            ndcg, prec, mrr = self.validate(args, global_data, valid_conv_data)
-            logger.info("Epoch {}: NDCG@5:{} P@5:{} MRR:{}".format(current_epoch, ndcg, prec, mrr))
-            if mrr > best_mrr:
-                best_mrr = mrr
+            ndcg, prec, recall, mrr = self.validate(args, global_data, valid_conv_data)
+
+            logger.info("Epoch {}: NDCG@{}:{} P@{}:{} R@{}:{} MRR:{}".format(
+                        current_epoch, self.eval_pos, ndcg, self.eval_pos, prec, self.eval_pos, recall, mrr))
+            criterion = recall if self.args.init else mrr
+            if criterion > best_criterion:
+                best_criterion = criterion
                 best_checkpoint_path = os.path.join(model_dir, 'model_best.ckpt')
                 logger.info("Copying %s to checkpoint %s" % (checkpoint_path, best_checkpoint_path))
                 shutil.copyfile(checkpoint_path, best_checkpoint_path)
@@ -116,8 +131,8 @@ class Trainer(object):
         """
         k = args.eval_k
         sorted_tf_cq_scores = self.infer_k_iter(args, global_data, valid_conv_data, "Validation", k, args.rank_cutoff)
-        ndcg, prec, mrr = self.calc_metrics(sorted_tf_cq_scores, valid_conv_data.pos_cq_dic, args.rank_cutoff)
-        return ndcg, prec, mrr
+        ndcg, prec, recall, mrr = self.calc_metrics(sorted_tf_cq_scores, valid_conv_data.pos_cq_dic, args.rank_cutoff)
+        return ndcg, prec, recall, mrr
 
     def test(self, args, global_data, test_conv_data, rankfname="test.best_model.ranklist"):
         k = args.eval_k
@@ -125,6 +140,10 @@ class Trainer(object):
         sorted_tf_cq_scores = self.infer_k_iter(args, global_data, test_conv_data, "Test", k, cutoff)
         self.calc_metrics(sorted_tf_cq_scores, test_conv_data.pos_cq_dic, cutoff)
         rankfname = "%s.%diter.len%d" % (rankfname, k, cutoff)
+        if args.init_cq:
+            rankfname += ".cq"
+        if args.rerank:
+            rankfname += ".rerank"
         output_path = os.path.join(args.save_dir, rankfname)
         self.write_ranklist(output_path, sorted_tf_cq_scores, cutoff)
 
@@ -141,10 +160,10 @@ class Trainer(object):
                     rank_fout.write(line)
 
     def calc_metrics(self, sorted_tf_cq_scores, pos_cq_dic, cutoff=100):
-        ndcg, mrr, prec = 0, 0, 0
-        eval_pos = 5
+        ndcg, mrr, prec, recall = 0, 0, 0, 0
+        eval_pos = self.eval_pos
         for tfid in sorted_tf_cq_scores: # queries with no 
-            cur_pos_dic, other_pos_dic = pos_cq_dic[tfid]
+            cur_pos_dic, other_pos_dic = pos_cq_dic.get(tfid, [[],[]])
             ranklist = [2 if x in cur_pos_dic \
                 else 1 if x in other_pos_dic else 0 for x, score in sorted_tf_cq_scores[tfid]]
             iranklist = [2] * len(cur_pos_dic) + [1] * len(other_pos_dic)
@@ -153,16 +172,21 @@ class Trainer(object):
             cur_mrr = calc_mrr(ranklist)
             ndcg += cur_ndcg
             mrr += cur_mrr
-            prec += sum([1 if x > 0 else 0 for x in ranklist[:eval_pos]]) / min(len(ranklist), eval_pos)
+            prec += sum([1 if x > 0 else 0 for x in ranklist[:eval_pos]]) \
+                / min(len(ranklist), eval_pos)
+            recall += sum([1 if x > 0 else 0 for x in ranklist[:eval_pos]]) \
+                / (max(1, len(cur_pos_dic)+len(other_pos_dic)))
         eval_count = len(sorted_tf_cq_scores)
         ndcg /= eval_count
         mrr /= eval_count
         prec /= eval_count
+        recall /= eval_count
         logger.info(
-            "EvalCount:{} NDCG@5:{} P@5:{} MRR:{}".format(eval_count, ndcg, prec, mrr))
+            "EvalCount:{} NDCG@{}:{} P@{}:{} R@{}:{} MRR:{}".format(
+                eval_count, eval_pos, ndcg, eval_pos, prec, eval_pos, recall, mrr))
         # some topic_facet_id could have no cur_pos_cq (with label 2), 
         # but they still have other_pos_cq with label 1.
-        return ndcg, prec, mrr
+        return ndcg, prec, recall, mrr
 
     def get_entry_scores(self, args, dataloader, description):
         self.model.eval()
@@ -202,7 +226,7 @@ class Trainer(object):
             sorted_tf_cq_scores = self.get_entry_scores(args, dataloader, description)
             # print(len(sorted_tf_cq_scores), len(tf_candi_cq_dic))
             for tfid in sorted_tf_cq_scores:
-                cur_pos_dic, _ = conv_data.pos_cq_dic[tfid]
+                cur_pos_dic, _ = conv_data.pos_cq_dic.get(tfid, [[],[]])
                 if sorted_tf_cq_scores[tfid][0][0] in cur_pos_dic:
                     # cq_id, score # tf id of the top 1 cq
                     tf_candi_cq_dic.pop(tfid, None)
@@ -211,11 +235,12 @@ class Trainer(object):
                 end = cutoff - len(tf_top_cq_dic[tfid]) if i == k-1 else 1
                 tf_top_cq_dic[tfid].extend(sorted_tf_cq_scores[tfid][:end])
         for tfid in tf_top_cq_dic:
-            cur_pos_dic, _ = conv_data.pos_cq_dic[tfid]
-            print(tf_top_cq_dic[tfid])
+            cur_pos_dic, _ = conv_data.pos_cq_dic.get(tfid, [[],[]])
+            # print(tf_top_cq_dic[tfid])
             for rank in range(len(tf_top_cq_dic[tfid])):
-                print(rank, len(tf_top_cq_dic[tfid]), tf_top_cq_dic[tfid][rank])
-                if tf_top_cq_dic[tfid][rank][0] in cur_pos_dic:
+                # print(rank, len(tf_top_cq_dic[tfid]), tf_top_cq_dic[tfid][rank])
+                if k > 1 and tf_top_cq_dic[tfid][rank][0] in cur_pos_dic:
+                    # iterative interaction, when label-2 cq is find, stop iterating. 
                     tf_top_cq_dic[tfid] = tf_top_cq_dic[tfid][:rank+1]
                     break
         return tf_top_cq_dic

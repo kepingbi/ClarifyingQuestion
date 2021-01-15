@@ -26,7 +26,14 @@ class ConvSearchData():
         self.pos_doc_dic, self.candidate_doc_dic = self.read_partitition(part_doc_file)
         logger.info("Load %s!" % part_cq_file)
         self.pos_cq_dic, self.candidate_cq_dic = self.read_partitition(part_cq_file)
+        # if os.path.exists(args.init_rankfile):
+        #     new_candi_cq_dic = dict()
+        #     for topic_facet_id in self.pos_cq_dic:
+        #         topic = topic_facet_id.split("-")[0] + "-X"
+        #         new_candi_cq_dic[topic_facet_id] = set(self.global_data.cq_cq_rank_dic[topic])
+        #     self.candidate_cq_dic = new_candi_cq_dic
         logger.info("ConvSearchData loaded completely!")
+
 
     def initialize_epoch(self):
         # self.neg_sample_products = np.random.randint(0, self.product_size, size = (self.set_review_size, self.neg_per_pos))
@@ -91,6 +98,11 @@ class GlobalConvSearchData():
         # topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_doc.mu1500.ranklist")
         topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "cq_top_doc_rerank50.ranklist")
         topic_cq_cq_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_q.ranklist")
+        if os.path.exists(args.init_rankfile):
+            topic_cq_cq_rankfile = args.init_rankfile
+        cq_imp_word_file = os.path.join(data_path, "imp_cq_words.json")
+        self.cq_imp_words_dic = json.load(cq_imp_word_file)
+
         # self.clarify_q_dic = self.read_id_content_json(question_path)
         # self.doc_dic = self.read_id_content_json(candi_doc_path)
         self.clarify_q_dic = torch.load(question_path)
@@ -99,6 +111,7 @@ class GlobalConvSearchData():
         self.topic_dic, self.answer_dic = self.read_qulac_answer(qulac_path)
         self.cq_doc_rank_dic = self.read_topic_cq_ranklist(topic_cq_doc_rankfile)
         self.cq_cq_rank_dic = self.read_topic_cq_ranklist(topic_cq_cq_rankfile)
+    
         self.cq_top_doc_info_dic = dict()
         self.cq_top_cq_info_dic = dict()
         for qid in self.cq_doc_rank_dic:

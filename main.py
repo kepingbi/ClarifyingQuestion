@@ -9,6 +9,7 @@ import os
 
 from others.logging import logger, init_logger
 from models.cq_ranker import ClarifyQuestionRanker, build_optim
+from models.context_ranker import ContextRanker
 from data.data_util import GlobalConvSearchData, ConvSearchData
 from trainer import Trainer
 from rl_trainer import RLTrainer
@@ -27,20 +28,34 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', default=666, type=int)
     parser.add_argument("--train_from", default='')
+    parser.add_argument("--init_model", default='')
+    parser.add_argument("--init_rankfile", default='')
     parser.add_argument("--model_name", default='plain_transformer',
             choices=['ref_transformer', 'plain_transformer'], help="which type of model is used to train")
+    parser.add_argument("--selector", default='none',
+            choices=['ref', 'plain', "none"], help="which type of model is used as selector")
+    parser.add_argument("--sel_struct", default='concat',
+            choices=['concat', 'numeric'], help="which type of model is used as selector")
     parser.add_argument("--rl", type=str2bool, nargs='?',const=True,default=False,
             help="whether to use reinforcement learning to train.")
+    parser.add_argument("--init", type=str2bool, nargs='?',const=True,default=False,
+            help="whether to train a model for initial retrieval.")
+    parser.add_argument("--init_cq", type=str2bool, nargs='?',const=True,default=False,
+            help="whether to collect ranklist for cqs.")
+    parser.add_argument("--fix_scorer", type=str2bool, nargs='?',const=True,default=True,
+            help="whether to fix the initial model for relevance matching.")
+    parser.add_argument("--rerank", type=str2bool, nargs='?',const=True,default=False,
+            help="whether to rerank results from initial retrieval.")
     parser.add_argument("--rankfname", default="test.best_model.ranklist")
     parser.add_argument("--dropout", default=0.1, type=float)
     parser.add_argument("--pos_cq_thre", default=0.8, type=float, help="")
     parser.add_argument("--token_dropout", default=0.1, type=float)
     parser.add_argument("--optim", type=str, default="adam", help="sgd or adam")
-    parser.add_argument("--lr", default=0.002, type=float) #0.002
+    parser.add_argument("--lr", default=0.001, type=float) #0.002
     parser.add_argument("--beta1", default= 0.9, type=float)
     parser.add_argument("--beta2", default=0.999, type=float)
     parser.add_argument("--decay_method", default='noam', choices=['noam', 'adam'],type=str) #warmup learning rate then decay
-    parser.add_argument("--warmup_steps", default=8000, type=int) #10000
+    parser.add_argument("--warmup_steps", default=800, type=int) #10000
     parser.add_argument("--max_grad_norm", type=float, default=5.0,
                             help="Clip gradients to this norm.")
     parser.add_argument('--gradient_accumulation_steps',
@@ -91,6 +106,8 @@ def parse_args():
                             help="Rank cutoff for output ranklists.")
     parser.add_argument("--eval_k", type=int, default=5,
                             help="Iteration for the clarifying questions.")
+    parser.add_argument("--eval_pos", type=int, default=5,
+                            help="Evaluation Position for NDCG, Precision, and Recall.")
     parser.add_argument("--max_hist_turn", type=int, default=3,
                             help="Iteration for the clarifying questions.")
     parser.add_argument("--max_episode_len", type=int, default=5,
@@ -103,13 +120,13 @@ def parse_args():
 
 model_flags = ['embedding_size', 'ff_size', 'heads', 'inter_layers']
 
-def create_model(args, load_path=''):
+def create_model(args, load_path='', partial=False):
     """Create model and initialize or load parameters in session."""
         #global_data and conv_data not used yet
-    if args.model_name == "ref_transformer" or args.model_name == "plain_transformer":
+    if args.selector == "plain":
+        model = ContextRanker(args, args.device)
+    elif args.model_name == "ref_transformer" or args.model_name == "plain_transformer":
         model = ClarifyQuestionRanker(args, args.device)
-    else:
-        pass
 
     if os.path.exists(load_path):
     #if load_path != '':
@@ -120,13 +137,22 @@ def create_model(args, load_path=''):
         for k in opt.keys():
             if (k in model_flags):
                 setattr(args, k, opt[k])
-        args.start_epoch = checkpoint['epoch']
-        model.load_cp(checkpoint)
-        optim = build_optim(args, model, checkpoint)
+        # args.start_epoch = checkpoint['epoch']
+        if partial:
+            model.cq_bert_ranker.load_cp(checkpoint)
+            if args.fix_scorer:
+                logger.info("fix the initial model with BERT")
+                #for param in self.bert.model.parameters():
+                for param in model.cq_bert_ranker.parameters():
+                    param.requires_grad = False
+        else:
+            model.load_cp(checkpoint)
+        optim = build_optim(args, model, None)
+        # optim = build_optim(args, model, checkpoint)
     else:
         logger.info('No available model to load. Build new model.')
         optim = build_optim(args, model, None)
-    logger.info(model)
+    # logger.info(model)
     return model, optim
 
 def train(args):
@@ -140,7 +166,10 @@ def train(args):
         torch.cuda.manual_seed(args.seed)
 
     global_data = GlobalConvSearchData(args, args.data_dir)
-    model, optim = create_model(args, args.train_from)
+    if os.path.exists(args.init_model):
+        model, optim = create_model(args, args.init_model, partial=True)
+    else:
+        model, optim = create_model(args, args.train_from)
     if args.rl:
         trainer = RLTrainer(args, model, optim)
     else:
@@ -160,15 +189,17 @@ def validate(args):
     global_data = GlobalConvSearchData(args, args.data_dir)
     valid_conv_data = ConvSearchData(args, args.input_train_dir, "valid", global_data)
 #     valid_dataset = ClarifyQuestionDataset(args, global_data, valid_conv_data)
-    best_ndcg, best_model = 0, None
+    best_criterion, best_model = 0, None
     for cur_model_file in cp_files:
         #logger.info("Loading {}".format(cur_model_file))
         cur_model, _ = create_model(args, cur_model_file)
         trainer = Trainer(args, cur_model, None)
-        ndcg, prec, mrr = trainer.validate(args, global_data, valid_conv_data)
-        logger.info("NDCG@5:{} P@5:{} MRR:{} Model:{}".format(ndcg, prec, mrr, cur_model_file))
-        if ndcg > best_ndcg:
-            best_ndcg = ndcg
+        ndcg, prec, recall, mrr = trainer.validate(args, global_data, valid_conv_data)
+        logger.info("NDCG@{}:{} P@{}:{} R@{}:{} MRR:{} Model:{}".format(
+            args.eval_pos, ndcg, args.eval_pos, prec, args.eval_pos, recall, mrr, cur_model_file))
+        criterion = recall if args.init else mrr
+        if criterion > best_criterion:
+            best_criterion = criterion
             best_model = cur_model_file
 
     test_conv_data = ConvSearchData(args, args.input_train_dir, "test", global_data)
@@ -183,6 +214,7 @@ def test(args):
     test_conv_data = ConvSearchData(args, args.input_train_dir, "test", global_data)
     model_path = os.path.join(args.save_dir, 'model_best.ckpt')
     best_model, _ = create_model(args, model_path)
+    # best_model, _ = create_model(args, args.train_from)
     trainer = Trainer(args, best_model, None)
     trainer.test(args, global_data, test_conv_data, args.rankfname)
 

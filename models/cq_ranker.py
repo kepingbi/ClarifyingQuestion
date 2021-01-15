@@ -100,15 +100,16 @@ class ClarifyQuestionRanker(nn.Module):
     def get_candi_cq_scores(self, batch_data):
         batch_size, candi_size, seq_length = batch_data.candi_cq_words.size()
         _, ref_doc_count, doc_length = batch_data.ref_doc_words.size()
+        # print(ref_doc_count)
         # batch_size, candi_size, seq_length
         # batch_size, ref_doc_count, doc_length
 
         candi_cq_words = batch_data.candi_cq_words.view(-1, seq_length)
         candi_seg_ids = batch_data.candi_seg_ids.view(-1, seq_length)
         ref_doc_words = batch_data.ref_doc_words.view(-1, doc_length)
-        cq_words_masks = candi_cq_words.ne(self.pad_vid)
         doc_token_masks = ref_doc_words.ne(self.pad_vid)
-
+        cq_words_masks = candi_cq_words.ne(self.pad_vid)
+    
         query_vecs = self.bert(candi_cq_words, candi_seg_ids, cq_words_masks)
         # query_vecs is batch_size * candi_size, cq_words_len, embedding_size
         if self.args.model_name == "ref_transformer":

@@ -34,6 +34,8 @@ def calc_ndcg(ranklist, iranklist, pos=10):
     ndcg = 0.0
     gain = 0.0
     idcg = sum(calc_idcg(iranklist))
+    if idcg == 0:
+        return 0.
     for rank, label in enumerate(ranklist):
         rank += 1
         if label > 0:
