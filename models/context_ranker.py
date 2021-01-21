@@ -96,8 +96,7 @@ class ContextRanker(nn.Module):
             scores = self.linear2(torch.relu(self.linear1(concat_vecs)))
         elif self.args.sel_struct == "numeric":
             score_wrt_topics, candi_cq_mask = self.cq_bert_ranker.get_candi_cq_scores(batch_data)
-
-
+            #TODO
 
         # batch_size * candi_size
         scores = scores.view(batch_size, candi_size)

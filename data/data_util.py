@@ -26,14 +26,27 @@ class ConvSearchData():
         self.pos_doc_dic, self.candidate_doc_dic = self.read_partitition(part_doc_file)
         logger.info("Load %s!" % part_cq_file)
         self.pos_cq_dic, self.candidate_cq_dic = self.read_partitition(part_cq_file)
-        # if os.path.exists(args.init_rankfile):
-        #     new_candi_cq_dic = dict()
-        #     for topic_facet_id in self.pos_cq_dic:
-        #         topic = topic_facet_id.split("-")[0] + "-X"
-        #         new_candi_cq_dic[topic_facet_id] = set(self.global_data.cq_cq_rank_dic[topic])
-        #     self.candidate_cq_dic = new_candi_cq_dic
+        for topic_facet_id in self.candidate_cq_dic:
+            self.candidate_cq_dic[topic_facet_id] = self.candidate_cq_dic[topic_facet_id][:self.args.rerank_topk]
+        #### load candidate from cq_rank file. ###
+        # new_candi_cq_dic = dict()
+        # for topic_facet_id in self.pos_cq_dic:
+        #     topic = topic_facet_id.split("-")[0] + "-X"
+        #     # cq_set = [x for x,y in self.global_data.cq_cq_rank_dic[topic]]
+        #     # new_candi_cq_dic[topic_facet_id] = set(cq_set)
+        #     new_candi_cq_dic[topic_facet_id] = self.global_data.cq_cq_rank_dic[topic]
+        #     # list of (cq_id, score)
+        # self.candidate_cq_dic = new_candi_cq_dic
+        self.all_candidate_cq_dic = self.candidate_cq_dic
+        if os.path.exists(args.init_rankfile):
+            self.all_candidate_cq_dic = global_data.read_topic_cq_ranklist(args.init_rankfile)
+            for topic_facet_id in self.all_candidate_cq_dic:
+                self.all_candidate_cq_dic[topic_facet_id] = self.all_candidate_cq_dic[topic_facet_id][:self.args.rerank_topk]
+            self.candidate_cq_dic = dict()
+            for topic_facet_id in self.pos_cq_dic:
+                self.candidate_cq_dic[topic_facet_id] = self.all_candidate_cq_dic[topic_facet_id]
+       
         logger.info("ConvSearchData loaded completely!")
-
 
     def initialize_epoch(self):
         # self.neg_sample_products = np.random.randint(0, self.product_size, size = (self.set_review_size, self.neg_per_pos))
@@ -69,7 +82,7 @@ class ConvSearchData():
                 if is_cq:
                     cur_pos_dic = set(cur_pos_dic.keys())
                     other_pos_dic = set(other_pos_dic.keys())
-                    candi_docs = set(candi_docs)
+                    candi_docs = candi_docs
 
                 pos_unit_dic[topic_facet_id] = (cur_pos_dic, other_pos_dic)
                 candidate_unit_dic[topic_facet_id] = candi_docs
@@ -97,11 +110,16 @@ class GlobalConvSearchData():
         qulac_path = os.path.join(data_path, "new_qulac.json")
         # topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_doc.mu1500.ranklist")
         topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "cq_top_doc_rerank50.ranklist")
-        topic_cq_cq_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_q.ranklist")
-        if os.path.exists(args.init_rankfile):
-            topic_cq_cq_rankfile = args.init_rankfile
+        # topic_cq_cq_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_q.ranklist")
+        if args.rerank:
+            topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.ql.rerank")
+        else:
+            topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.rerank")
+        # if os.path.exists(args.init_rankfile):
+        #     topic_cq_cq_rankfile = args.init_rankfile
         cq_imp_word_file = os.path.join(data_path, "imp_cq_words.json")
-        self.cq_imp_words_dic = json.load(cq_imp_word_file)
+        with open(cq_imp_word_file, 'r') as fin:
+            self.cq_imp_words_dic = json.load(fin)
 
         # self.clarify_q_dic = self.read_id_content_json(question_path)
         # self.doc_dic = self.read_id_content_json(candi_doc_path)
@@ -110,14 +128,15 @@ class GlobalConvSearchData():
         self.doc_psg_dic = torch.load(candi_doc_psg_path) # the first psg and other top ranked doc
         self.topic_dic, self.answer_dic = self.read_qulac_answer(qulac_path)
         self.cq_doc_rank_dic = self.read_topic_cq_ranklist(topic_cq_doc_rankfile)
+        logger.info("Loading %s" % topic_cq_cq_rankfile)
         self.cq_cq_rank_dic = self.read_topic_cq_ranklist(topic_cq_cq_rankfile)
     
         self.cq_top_doc_info_dic = dict()
         self.cq_top_cq_info_dic = dict()
         for qid in self.cq_doc_rank_dic:
-            self.cq_top_doc_info_dic[qid] = {doc:rank+1 for rank,doc in enumerate(self.cq_doc_rank_dic[qid])}
+            self.cq_top_doc_info_dic[qid] = {doc:rank+1 for rank, (doc, score) in enumerate(self.cq_doc_rank_dic[qid])}
         for qid in self.cq_cq_rank_dic:
-            self.cq_top_cq_info_dic[qid] = {cq:rank+1 for rank,cq in enumerate(self.cq_cq_rank_dic[qid])}
+            self.cq_top_cq_info_dic[qid] = {cq:rank+1 for rank, (cq,score) in enumerate(self.cq_cq_rank_dic[qid])}
 
         logger.info("GlobalConvSearchData loaded completely" )
     
@@ -134,6 +153,28 @@ class GlobalConvSearchData():
     #             if count % 500 == 0:
     #                 logger.info("%d ids has been parsed!" % count)
     #     return content_dict
+    @staticmethod
+    def collect_candidate_sim_wrt_tq(candidate_cq_dic, cq_cq_rank_dic):
+        candi_sim_wrt_tq_dic = defaultdict(dict)
+        for tfid in candidate_cq_dic:
+            tid, _ = tfid.split('-')
+            for candi_cq in candidate_cq_dic[tfid]:
+                score = 0.
+                if len(candi_cq) == 2:
+                    candi_cq, score = candi_cq
+                candi_sim_wrt_tq_dic[candi_cq][tid] = {"%s-X" % tid: score}
+
+        for tcqid in cq_cq_rank_dic:
+            tid, cqid = tcqid.split('-')
+            if cqid == "X":
+                continue
+            for cq_id, score in cq_cq_rank_dic[tcqid]:
+                if cq_id not in candi_sim_wrt_tq_dic:
+                    continue
+                if tid not in candi_sim_wrt_tq_dic[cq_id]:
+                    continue
+                candi_sim_wrt_tq_dic[cq_id][tid][tcqid] = score
+        return candi_sim_wrt_tq_dic
 
     def read_qulac_answer(self, qulac_file):
         topic_dic = dict() # query
@@ -169,5 +210,6 @@ class GlobalConvSearchData():
                 # if segs[0].endswith("X"):
                 #     qid = segs[0].split('-')[0]
                 doc_id = segs[2]
-                topic_ranklist_dic[qid].append(doc_id)
+                score = float(segs[4])
+                topic_ranklist_dic[qid].append((doc_id, score))
         return topic_ranklist_dic

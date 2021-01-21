@@ -116,7 +116,7 @@ class InitRetrievalDataset(Dataset):
                 candi_cq_list = list(global_data.clarify_q_dic.keys())
             if len(candi_cq_list) == 0: #in case the candidate list is empty, query 115 doesn't matching any clarifying question. 
                 continue
-            ref_cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
+            ref_cq_list = [cq for cq, score in global_data.cq_cq_rank_dic["%s-X" % topic]]
             ref_cq_list = ref_cq_list[:self.cq_topk]
 
             seg_count = int((len(candi_cq_list) - 1) / candi_batch_size) + 1
@@ -142,7 +142,7 @@ class InitRetrievalDataset(Dataset):
             if len(candi_cq_list) == 0: #in case the candidate list is empty, query 115 doesn't matching any clarifying question. 
                 continue
             topic, _ = topic_facet_id.split('-')
-            ref_cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
+            ref_cq_list = [cq for cq, score in global_data.cq_cq_rank_dic["%s-X" % topic]]
             ref_cq_list = ref_cq_list[:self.cq_topk]
 
             seg_count = int((len(candi_cq_list) - 1) / candi_batch_size) + 1
@@ -169,7 +169,7 @@ class InitRetrievalDataset(Dataset):
         for topic_id in qrel_dic:
             for pos_cq_id in qrel_dic[topic_id]:
                 neg_cq_ids = random.sample(all_cqs, negk)
-                ref_cq_list = global_data.cq_cq_rank_dic["%s-X" % topic_id]
+                ref_cq_list = [cq for cq, score in global_data.cq_cq_rank_dic["%s-X" % topic_id]]
                 ref_cq_list = ref_cq_list[:self.cq_topk]
 
                 # only calculate this for those with label 1

@@ -10,6 +10,7 @@ import os
 from others.logging import logger, init_logger
 from models.cq_ranker import ClarifyQuestionRanker, build_optim
 from models.context_ranker import ContextRanker
+from models.ref_word_ranker import RefWordsRanker
 from data.data_util import GlobalConvSearchData, ConvSearchData
 from trainer import Trainer
 from rl_trainer import RLTrainer
@@ -30,10 +31,11 @@ def parse_args():
     parser.add_argument("--train_from", default='')
     parser.add_argument("--init_model", default='')
     parser.add_argument("--init_rankfile", default='')
+    parser.add_argument("--rerank_topk", type=int, default=50, help="rerank how many cqs to use during interactions")
     parser.add_argument("--model_name", default='plain_transformer',
             choices=['ref_transformer', 'plain_transformer'], help="which type of model is used to train")
     parser.add_argument("--selector", default='none',
-            choices=['ref', 'plain', "none"], help="which type of model is used as selector")
+            choices=['ref', "wref", 'plain', "none"], help="which type of model is used as selector")
     parser.add_argument("--sel_struct", default='concat',
             choices=['concat', 'numeric'], help="which type of model is used as selector")
     parser.add_argument("--rl", type=str2bool, nargs='?',const=True,default=False,
@@ -48,7 +50,11 @@ def parse_args():
             help="whether to rerank results from initial retrieval.")
     parser.add_argument("--rankfname", default="test.best_model.ranklist")
     parser.add_argument("--dropout", default=0.1, type=float)
+    parser.add_argument("--tweight", default=0.9, type=float)
+    parser.add_argument("--sigmoid_t", default=0.1, type=float)
+    parser.add_argument("--sigmoid_cq", default=0.1, type=float)
     parser.add_argument("--pos_cq_thre", default=0.8, type=float, help="")
+    parser.add_argument("--hidden_size", default=1, type=int, help="hidden size for ref_word_ranker")
     parser.add_argument("--token_dropout", default=0.1, type=float)
     parser.add_argument("--optim", type=str, default="adam", help="sgd or adam")
     parser.add_argument("--lr", default=0.001, type=float) #0.002
@@ -99,12 +105,16 @@ def parse_args():
                             help="use sparse embedding or not.")
     parser.add_argument("--scale_grad", action='store_true',
                             help="scale the grad of word and av embeddings.")
-    parser.add_argument("--mode", type=str, default="train", choices=["train", "valid", "test"])
+    parser.add_argument("--mode", type=str, default="train", choices=["train", "valid", "test", "baseline"])
     parser.add_argument("--doc_topk", type=int, default=3,
+                            help="The number of documents used for reference.")
+    parser.add_argument("--cq_topk", type=int, default=15,
+                            help="The number of documents used for reference.")
+    parser.add_argument("--words_topk", type=int, default=20,
                             help="The number of documents used for reference.")
     parser.add_argument("--rank_cutoff", type=int, default=5,
                             help="Rank cutoff for output ranklists.")
-    parser.add_argument("--eval_k", type=int, default=5,
+    parser.add_argument("--eval_k", type=int, default=3,
                             help="Iteration for the clarifying questions.")
     parser.add_argument("--eval_pos", type=int, default=5,
                             help="Evaluation Position for NDCG, Precision, and Recall.")
@@ -123,10 +133,13 @@ model_flags = ['embedding_size', 'ff_size', 'heads', 'inter_layers']
 def create_model(args, load_path='', partial=False):
     """Create model and initialize or load parameters in session."""
         #global_data and conv_data not used yet
-    if args.selector == "plain":
+    if args.selector == "none":
+        if args.model_name == "ref_transformer" or args.model_name == "plain_transformer":
+            model = ClarifyQuestionRanker(args, args.device)
+    elif args.selector == "plain":
         model = ContextRanker(args, args.device)
-    elif args.model_name == "ref_transformer" or args.model_name == "plain_transformer":
-        model = ClarifyQuestionRanker(args, args.device)
+    else:
+        model = RefWordsRanker(args, args.device)
 
     if os.path.exists(load_path):
     #if load_path != '':
@@ -227,7 +240,12 @@ def main(args):
         train(args)
     elif args.mode == "valid":
         validate(args)
-    else:
+    elif args.mode == "test":
         test(args)
+    elif args.mode == "baseline":
+        global_data = GlobalConvSearchData(args, args.data_dir)
+        test_conv_data = ConvSearchData(args, args.input_train_dir, "test", global_data)
+        trainer = Trainer(args, None, None)
+        trainer.run_baseline(args, global_data, test_conv_data, args.rankfname)
 if __name__ == '__main__':
     main(parse_args())

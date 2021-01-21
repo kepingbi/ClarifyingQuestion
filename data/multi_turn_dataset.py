@@ -44,7 +44,8 @@ class MultiTurnDataset(Dataset):
                 hist_cqs = hist_cq_dic[topic_facet_id]
             hist_cqs = [cq for cq,score in hist_cqs]
             hist_cq_set = set(hist_cqs)
-            candi_cq_list = list(candidate_cq_dic[topic_facet_id].difference(hist_cq_set))
+            candi_cq_list = [x for x in candidate_cq_dic[topic_facet_id] if x not in hist_cq_set]
+            # candi_cq_list = list(candidate_cq_dic[topic_facet_id].difference(hist_cq_set))
             if len(candi_cq_list) == 0: #in case the candidate list is empty, query 115 doesn't matching any clarifying question. 
                 continue
             topic, _ = topic_facet_id.split('-')
@@ -52,7 +53,7 @@ class MultiTurnDataset(Dataset):
             #     global_data.cq_doc_rank_dic, global_data.cq_top_doc_info_dic, \
             #         topic, hist_cqs)
             # doc_list = doc_list[:topk]
-            cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
+            cq_list = [cq for cq, score in global_data.cq_cq_rank_dic["%s-X" % topic]]
             cq_list = cq_list[:self.cq_topk]
             cq_list = [x for x in cq_list if x not in hist_cq_set]
 
@@ -72,22 +73,25 @@ class MultiTurnDataset(Dataset):
         for hist_len in range(1, self.args.max_hist_turn):
             # must have historical cq
             entries = self.select_neg_samples(prod_data, hist_len)
-            for topic_facet_id, hist_cqs, pos_cq, other_cq, neg_cq in entries:
+            for topic_facet_id, hist_cqs, cq_tuples, labels in entries:
             # for topic_facet_id, hist_cqs, pos_cq, neg_cq in entries:
                 topic, _ = topic_facet_id.split('-')
                 # doc_list = self.doc_diff(
                 #     global_data.cq_doc_rank_dic, global_data.cq_top_doc_info_dic, \
                 #         topic, hist_cqs)
                 # doc_list = doc_list[:topk]
-                cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
+                cq_list = [cq for cq, score in global_data.cq_cq_rank_dic["%s-X" % topic]]
+
                 cq_list = cq_list[:self.cq_topk]
                 cq_list = [x for x in cq_list if x not in set(hist_cqs)]
 
                 # only calculate this for those with label 1
-                other_cq_sim = self.cq_similarity(global_data.cq_top_cq_info_dic, hist_cqs, other_cq)
+                # other_cq_sim = self.cq_similarity(global_data.cq_top_cq_info_dic, hist_cqs, other_cq)
                 # train_data.append([topic_facet_id, hist_cqs, doc_list, \
                 train_data.append([topic_facet_id, hist_cqs, cq_list, \
-                     [pos_cq, other_cq, neg_cq], [4., 1.-other_cq_sim, 0.]])
+                     cq_tuples, labels])
+                # print(cq_tuples, labels)
+                    #  [pos_cq, other_cq, neg_cq], [4., 1.-other_cq_sim, 0.]])
                     #  [pos_cq, other_cq, neg_cq], [4., 1., 0.]])
                     #  [pos_cq, other_cq], [1., 0.]])
                 # train_data.append([topic_facet_id, hist_cqs, cq_list, \
@@ -132,7 +136,7 @@ class MultiTurnDataset(Dataset):
             max_sim = max(max_sim, sim)
         return max_sim
 
-    def select_neg_samples(self, prod_data, hist_len):
+    def select_neg_samples_triples(self, prod_data, hist_len):
         # hist_len: 0,1,2,3
         # cq:1->cq:2; cq:0->cq:2
         entries = []
@@ -172,6 +176,47 @@ class MultiTurnDataset(Dataset):
                 # entries.append([topic_facet_id, hist_cqs, pos_cq, neg_cq[0]])
                 # entries.append([topic_facet_id, hist_cqs, other_cq[0], neg_cq[0]])
         return entries
+
+    def select_neg_samples(self, prod_data, hist_len):
+        # hist_len: 0,1,2,3
+        # cq:1->cq:2; cq:0->cq:2
+        entries = []
+        # all_cq_set = set(self.global_data.clarify_q_dic.keys())
+        # rand_numbers = np.random.random(len(prod_data.pos_cq_dic) * 5)
+        # pos_cq_thre = self.args.pos_cq_thre # 0.8
+        # cur_no = 0
+        for topic_facet_id in prod_data.pos_cq_dic:
+            cur_pos_set, other_pos_set = prod_data.pos_cq_dic[topic_facet_id]
+            # candi_cq_set = set([x for x,score in prod_data.candidate_cq_dic[topic_facet_id]])
+            candi_cq_set = set(prod_data.candidate_cq_dic[topic_facet_id])
+            # add these two line to only use the positive in the candidate set
+            cur_pos_set = cur_pos_set.intersection(candi_cq_set)
+            # other_pos_set = other_pos_set.intersection(candi_cq_set)
+            ###################
+            candi_cq_set = candi_cq_set.difference(cur_pos_set)
+            # global_candi_set = all_cq_set.difference(cur_pos_set).difference(other_pos_set)
+            hist_cqs_set = set()
+            hist_cqs = []
+            if hist_len > 0:
+                if len(candi_cq_set) < hist_len:
+                    continue
+                hist_cqs = random.sample(candi_cq_set, hist_len)
+                hist_cqs_set = set(hist_cqs)
+            other_pos_set = other_pos_set.difference(hist_cqs_set)
+            candi_cq_set = candi_cq_set.difference(hist_cqs_set)
+            for pos_cq in cur_pos_set: # 1 cur_pos, 1 other_pos, 1 negative
+                sample_count = min(len(candi_cq_set), self.args.neg_per_pos)
+                if sample_count == 0:
+                    continue
+                sample_cqs = random.sample(candi_cq_set, sample_count)
+                for other_cq in sample_cqs:
+                    label = 1. if other_cq in other_pos_set else 0.
+                    if label > 0:
+                        label = self.cq_similarity(self.global_data.cq_top_cq_info_dic, hist_cqs, other_cq)
+                    entries.append([topic_facet_id, hist_cqs, [pos_cq, other_cq], [4.,label]])
+
+        return entries
+
 
     def __len__(self):
         return len(self._data)

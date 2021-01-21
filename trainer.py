@@ -6,6 +6,8 @@ from data.init_retrieval_dataset import InitRetrievalDataset
 from data.init_retrieval_dataloader import InitRetrievalDataloader
 from data.multi_turn_dataset import MultiTurnDataset
 from data.multi_turn_dataloader import MultiTurnDataloader
+from data.ref_word_dataset import RefWordsDataset
+from data.ref_word_dataloader import RefWordsDataloader
 import shutil
 import torch
 import numpy as np
@@ -45,9 +47,12 @@ class Trainer(object):
             if self.args.selector == "none":
                 self.ExpDataset = ClarifyQuestionDataset
                 self.ExpDataloader = ClarifyQuestionDataloader
-            else:
+            if self.args.selector == "plain":
                 self.ExpDataset = MultiTurnDataset
                 self.ExpDataloader = MultiTurnDataloader
+            else:
+                self.ExpDataset = RefWordsDataset
+                self.ExpDataloader = RefWordsDataloader
 
     def train(self, args, global_data, train_conv_data, valid_conv_data):
         """
@@ -142,6 +147,8 @@ class Trainer(object):
         rankfname = "%s.%diter.len%d" % (rankfname, k, cutoff)
         if args.init_cq:
             rankfname += ".cq"
+        if "rerank" in args.init_rankfile:
+            rankfname += ".ql"
         if args.rerank:
             rankfname += ".rerank"
         output_path = os.path.join(args.save_dir, rankfname)
@@ -244,3 +251,87 @@ class Trainer(object):
                     tf_top_cq_dic[tfid] = tf_top_cq_dic[tfid][:rank+1]
                     break
         return tf_top_cq_dic
+
+    def baseline_k_iter(self, args, global_data, conv_data, description, k=3, cutoff=100):
+        # for each round, prepare dataset and dataloader
+        # get candidate scores
+        # output ranked list; freezing hist cq + curent ranked list
+        # tf_top_cq_dic = defaultdict(list)
+        sigmoid = torch.nn.Sigmoid()
+        tf_top_cq_dic = dict()
+        tf_candi_cq_dic = conv_data.candidate_cq_dic.copy() # use candidates for all the tfids
+        candi_sim_wrt_tq_dic = global_data.collect_candidate_sim_wrt_tq(
+            tf_candi_cq_dic, global_data.cq_cq_rank_dic)
+        for i in range(k):
+            sorted_tf_cq_scores = dict()
+            print(len(tf_candi_cq_dic))
+            for tfid in tf_candi_cq_dic:
+                tid, fid = tfid.split('-')
+                candi_scores = []
+                candi_cqs = []
+                hist_cq_set = set([cq for cq,score in tf_top_cq_dic.get(tfid, [])])
+                candi_cq_set = set([cq for cq, score in tf_candi_cq_dic[tfid]]).difference(hist_cq_set)
+                for candi_cq in candi_cq_set:
+                    candi_cqs.append(candi_cq)
+                    scores = []
+                    if "%s-X" % tid not in candi_sim_wrt_tq_dic[candi_cq][tid]:
+                        sim_wrt_t = 0.
+                        print(candi_cq, tid)
+                        print(tf_candi_cq_dic[tfid])
+                    else:
+                        sim_wrt_t = candi_sim_wrt_tq_dic[candi_cq][tid]["%s-X" % tid]
+                    scores.append(sim_wrt_t)
+                    if tfid in tf_top_cq_dic:
+                        for hist_cq, _ in tf_top_cq_dic[tfid]:
+                            if hist_cq not in candi_sim_wrt_tq_dic[candi_cq][tid]:
+                                sim_wrt_hist = 0.
+                            else:
+                                sim_wrt_hist = candi_sim_wrt_tq_dic[candi_cq][tid][hist_cq]
+                            scores.append(sim_wrt_hist)
+                    candi_scores.append(scores)
+                candi_scores = torch.tensor(candi_scores).to(args.device)
+                t_sim = torch.log(sigmoid(candi_scores[:,0] * args.sigmoid_t))
+                hist_sim = torch.log(1 - sigmoid(candi_scores[:, 1:] * args.sigmoid_cq))
+                # print(tfid, t_sim)
+                # print(tfid, tf_top_cq_dic.get(tfid, None), hist_sim)
+                if hist_sim.size(-1) > 0:
+                    sim = t_sim * args.tweight + hist_sim.mean(dim=-1) * (1 - args.tweight)
+                else:
+                    sim = t_sim
+                sorted_scores = list(zip(candi_cqs, sim.cpu().tolist()))
+                sorted_scores.sort(key=lambda x:x[1], reverse=True)
+                sorted_tf_cq_scores[tfid] = sorted_scores
+                # print(sorted_scores)
+            for tfid in sorted_tf_cq_scores:
+                cur_pos_dic, _ = conv_data.pos_cq_dic.get(tfid, [[],[]])
+                if sorted_tf_cq_scores[tfid][0][0] in cur_pos_dic:
+                    # cq_id, score # tf id of the top 1 cq
+                    tf_candi_cq_dic.pop(tfid, None)
+                if tfid not in tf_top_cq_dic:
+                    tf_top_cq_dic[tfid] = []
+                end = cutoff - len(tf_top_cq_dic[tfid]) if i == k-1 else 1
+                tf_top_cq_dic[tfid].extend(sorted_tf_cq_scores[tfid][:end])
+        for tfid in tf_top_cq_dic:
+            cur_pos_dic, _ = conv_data.pos_cq_dic.get(tfid, [[],[]])
+            # print(tf_top_cq_dic[tfid])
+            for rank in range(len(tf_top_cq_dic[tfid])):
+                # print(rank, len(tf_top_cq_dic[tfid]), tf_top_cq_dic[tfid][rank])
+                # if k > 1 and tf_top_cq_dic[tfid][rank][0] in cur_pos_dic:
+                if tf_top_cq_dic[tfid][rank][0] in cur_pos_dic:
+                    # iterative interaction, when label-2 cq is find, stop iterating. 
+                    tf_top_cq_dic[tfid] = tf_top_cq_dic[tfid][:rank+1]
+                    break
+        return tf_top_cq_dic
+
+    def run_baseline(self, args, global_data, test_conv_data, rankfname="test.best_model.ranklist"):
+        k = args.eval_k
+        cutoff = args.rank_cutoff
+        sorted_tf_cq_scores = self.baseline_k_iter(args, global_data, test_conv_data, "Test", k, cutoff)
+        self.calc_metrics(sorted_tf_cq_scores, test_conv_data.pos_cq_dic, cutoff)
+        self.eval_pos = 1
+        self.calc_metrics(sorted_tf_cq_scores, test_conv_data.pos_cq_dic, cutoff)
+        self.eval_pos = 2
+        self.calc_metrics(sorted_tf_cq_scores, test_conv_data.pos_cq_dic, cutoff)
+        rankfname = "baseline.%s.%diter.len%d" % (rankfname, k, cutoff)
+        output_path = os.path.join(args.save_dir, rankfname)
+        self.write_ranklist(output_path, sorted_tf_cq_scores, cutoff)
