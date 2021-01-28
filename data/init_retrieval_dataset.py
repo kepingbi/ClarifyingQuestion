@@ -163,11 +163,23 @@ class InitRetrievalDataset(Dataset):
                 continue
             cur_pos_set, other_pos_set = prod_data.pos_cq_dic[topic_facet_id]
             qrel_dic[topic_id] = cur_pos_set.union(other_pos_set)
-
         all_cqs = self.global_data.clarify_q_dic.keys()
+        candidate_dic = dict()
+        for topic_facet_id in prod_data.candidate_cq_dic:
+            topic_id, _ = topic_facet_id.split("-")
+            if topic_id in candidate_dic:
+                continue
+            candi_cq_list = set(prod_data.candidate_cq_dic[topic_facet_id])
+            candidate_dic[topic_id] = candi_cq_list.difference(qrel_dic[topic_id])
+
         train_data = []
         for topic_id in qrel_dic:
             for pos_cq_id in qrel_dic[topic_id]:
+                sample_count = min(negk, len(candidate_dic[topic_id]))
+                neg_cq_ids = random.sample(candidate_dic[topic_id], sample_count)
+                if len(candidate_dic[topic_id]) < negk:
+                    sample_count = negk - len(candidate_dic[topic_id])
+                    neg_cq_ids.extend(random.sample(all_cqs, sample_count))
                 neg_cq_ids = random.sample(all_cqs, negk)
                 ref_cq_list = [cq for cq, score in global_data.cq_cq_rank_dic["%s-X" % topic_id]]
                 ref_cq_list = ref_cq_list[:self.cq_topk]

@@ -74,10 +74,10 @@ def calc_err(ranklist, mlabel=1):
         err_list.append(gain)
     return err_list
 
-def calc_mrr(ranklist):
+def calc_mrr(ranklist, label_above=1):
     for i, label in enumerate(ranklist):
         # if label > 0: # 
-        if label > 1: # The first true question regarding the aspect 
+        if label > label_above: # The first true question regarding the aspect 
             return 1.0 / (i + 1)
     return 0.0
 

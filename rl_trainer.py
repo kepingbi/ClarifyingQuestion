@@ -1,6 +1,7 @@
 from tqdm import tqdm
 from others.logging import logger
 from data.cq_retriever_dataset import ClarifyQuestionDataset
+from data.multi_turn_dataset import MultiTurnDataset
 # from data.cq_retriever_dataloader import ClarifyQuestionDataloader
 import shutil
 import torch
@@ -40,7 +41,7 @@ class RLTrainer(Trainer):
         get_batch_time = 0.0
         start_time = time.time()
         current_step = 0
-        best_mrr = 0.
+        best_criterion = 0.
         best_checkpoint_path = ''
         self.model.zero_grad()
         tf_ids = list(train_conv_data.candidate_cq_dic.keys())
@@ -86,14 +87,17 @@ class RLTrainer(Trainer):
                         start_time = time.time()
             checkpoint_path = os.path.join(model_dir, 'model_epoch_%d.ckpt' % current_epoch)
             self._save(current_epoch, checkpoint_path)
-            ndcg, prec, mrr = self.validate(args, global_data, valid_conv_data)
+            ndcg, prec, recall, mrr = self.validate(args, global_data, valid_conv_data)
             # ndcg, prec, mrr = 0., 0., 0.
-            logger.info("Epoch {}: NDCG@5:{} P@5:{} MRR:{}".format(current_epoch, ndcg, prec, mrr))
-            if mrr > best_mrr:
-                best_mrr = mrr
+            logger.info("Epoch {}: NDCG@{}:{} P@{}:{} R@{}:{} MRR:{}".format(
+                        current_epoch, self.eval_pos, ndcg, self.eval_pos, prec, self.eval_pos, recall, mrr))
+            criterion = recall if self.args.init else mrr
+            if criterion > best_criterion:
+                best_criterion = criterion
                 best_checkpoint_path = os.path.join(model_dir, 'model_best.ckpt')
                 logger.info("Copying %s to checkpoint %s" % (checkpoint_path, best_checkpoint_path))
                 shutil.copyfile(checkpoint_path, best_checkpoint_path)
+
         return best_checkpoint_path
 
     def calc_policy_loss(self, tf_episode):
@@ -124,27 +128,29 @@ class RLTrainer(Trainer):
         # for each round, prepare dataset and dataloader
         # get candidate scores
         # output ranked list; freezing hist cq + curent ranked list
-        tf_top_cq_dic = dict()
         # a single topic as the key
-        # tf_candi_cq_dic = {topic_facet_id: conv_data.candidate_cq_dic[topic_facet_id].copy()}
-        # conv_data.candidate_cq_dic[topic_facet_id] can be empty
-        cur_pos_set, other_pos_set = conv_data.pos_cq_dic[topic_facet_id]
-        origin_candiset = conv_data.candidate_cq_dic[topic_facet_id]
-        if len(origin_candiset) < args.max_episode_len:
-            other_pos = args.max_episode_len # make the candidate size not too small
-        new_candi_set = set()
-        if len(cur_pos_set) > 0:
-            new_candi_set.add(random.choice(list(cur_pos_set)))
-        if len(other_pos_set) > 0:
-            sample_size = min(len(other_pos_set), other_pos)
-            new_candi_set = new_candi_set.union(random.sample(other_pos_set, sample_size))
-        origin_candiset = origin_candiset.difference(new_candi_set)
-        if len(origin_candiset) > 0:
-            sample_size = min(len(origin_candiset), k_candi-other_pos)
-            new_candi_set = new_candi_set.union(random.sample(origin_candiset, sample_size))
-        if len(new_candi_set) == 0:
+        if len(conv_data.candidate_cq_dic[topic_facet_id]) == 0:
+            # conv_data.candidate_cq_dic[topic_facet_id] can be empty
             return []
-        tf_candi_cq_dic = {topic_facet_id: new_candi_set}
+        tf_top_cq_dic = dict()
+        tf_candi_cq_dic = {topic_facet_id: conv_data.candidate_cq_dic[topic_facet_id].copy()}
+        cur_pos_set, other_pos_set = conv_data.pos_cq_dic[topic_facet_id]
+        # origin_candiset = conv_data.candidate_cq_dic[topic_facet_id]
+        # if len(origin_candiset) < args.max_episode_len:
+        #     other_pos = args.max_episode_len # make the candidate size not too small
+        # new_candi_set = set()
+        # if len(cur_pos_set) > 0:
+        #     new_candi_set.add(random.choice(list(cur_pos_set)))
+        # if len(other_pos_set) > 0:
+        #     sample_size = min(len(other_pos_set), other_pos)
+        #     new_candi_set = new_candi_set.union(random.sample(other_pos_set, sample_size))
+        # origin_candiset = origin_candiset.difference(new_candi_set)
+        # if len(origin_candiset) > 0:
+        #     sample_size = min(len(origin_candiset), k_candi-other_pos)
+        #     new_candi_set = new_candi_set.union(random.sample(origin_candiset, sample_size))
+        # if len(new_candi_set) == 0:
+        #     return []
+        # tf_candi_cq_dic = {topic_facet_id: new_candi_set}
         tf_episode = []
         # print(tf_candi_cq_dic)
         for _ in range(args.max_episode_len):
@@ -172,12 +178,13 @@ class RLTrainer(Trainer):
             if cq in cur_pos_set:
                 reward = 4.
             elif cq in other_pos_set:
+                reward = -1.
                 # reward = 0.
                 hist_cqs = [x for x,y in tf_top_cq_dic[tfid]]
-                reward = - ClarifyQuestionDataset.cq_similarity(
-                    global_data.cq_doc_rank_dic, hist_cqs, cq)
+                # reward = - MultiTurnDataset.cq_similarity(
+                #     global_data.cq_top_cq_info_dic, hist_cqs, cq)
             else:
-                reward = -1.
+                reward = -2.
             # delta NDCG can be used as reward
             tf_top_cq_dic[tfid].append((cq, score))
             tf_episode.append(ActionReward(cq, torch.log(cq_probs[cq_id]), reward))

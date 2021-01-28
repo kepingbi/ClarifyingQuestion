@@ -77,6 +77,9 @@ class ClarifyQuestionRanker(nn.Module):
                     args.heads, args.dropout, args.inter_layers)
         elif self.args.model_name == "plain_transformer":
                 self.wo = nn.Linear(self.embedding_size, 1, bias=True)
+                if self.args.inter_embed_size > 1:
+                    self.wo1 = nn.Linear(self.embedding_size, self.args.inter_embed_size, bias=True)
+                    self.wo2 = nn.Linear(self.args.inter_embed_size, 1, bias=True)
         
         self.logsoftmax = torch.nn.LogSoftmax(dim=-1)
 
@@ -125,7 +128,10 @@ class ClarifyQuestionRanker(nn.Module):
             scores = self.transformer_encoder(query_vecs, ref_doc_vecs, cq_words_masks, doc_token_masks)
         elif self.args.model_name == "plain_transformer":
             cls_vecs = query_vecs.view(batch_size, candi_size, seq_length, -1)[:,:,0,:]
-            scores = self.wo(cls_vecs)
+            if self.args.inter_embed_size == 1:
+                scores = self.wo(cls_vecs)
+            else:
+                scores = self.wo2(torch.relu(self.wo1(cls_vecs)))
 
         # batch_size * candi_size
         scores = scores.view(batch_size, candi_size)
@@ -151,6 +157,12 @@ class ClarifyQuestionRanker(nn.Module):
         if hasattr(self, "wo"):
             nn.init.xavier_normal_(self.wo.weight)
             nn.init.constant_(self.wo.bias, 0)
+        if self.args.inter_embed_size > 1:
+            nn.init.xavier_normal_(self.wo1.weight)
+            nn.init.constant_(self.wo1.bias, 0)
+            nn.init.xavier_normal_(self.wo2.weight)
+            nn.init.constant_(self.wo2.bias, 0)
+
         if logger:
             logger.info(" CQRanker initialization finished.")
 

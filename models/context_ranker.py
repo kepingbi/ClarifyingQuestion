@@ -33,6 +33,7 @@ class ContextRanker(nn.Module):
         self.linear1 = nn.Linear(32*2, 4, bias=True)
         # self.linear1 = nn.Linear(self.embedding_size*2, 4, bias=True)
         self.linear2 = nn.Linear(4, 1, bias=True)
+        self.bias = torch.tensor(0., requires_grad=True).to(self.device)
 
         #for each q,u,i
         #Q, previous purchases of u, current available reviews for i, padding value
@@ -58,7 +59,8 @@ class ContextRanker(nn.Module):
             _, _, hist_len, cq_seq_length = batch_data.candi_hist_words.size()
         else:
             # print("no cq")
-            return self.cq_bert_ranker.get_candi_cq_scores(batch_data)
+            scores, candi_cq_mask = self.cq_bert_ranker.get_candi_cq_scores(batch_data)
+            return scores + self.bias, candi_cq_mask
         # _, ref_doc_count, doc_length = batch_data.ref_doc_words.size()
         # print(ref_doc_count)
         # batch_size, candi_size, seq_length

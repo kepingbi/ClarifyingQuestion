@@ -41,7 +41,9 @@ class ClarifyQuestionDataset(Dataset):
                 hist_cqs = hist_cq_dic[topic_facet_id]
             hist_cqs = [cq for cq,score in hist_cqs]
             hist_cq_set = set(hist_cqs)
-            candi_cq_list = list(candidate_cq_dic[topic_facet_id].difference(hist_cq_set))
+            # candi_cq_list = list(set(candidate_cq_dic[topic_facet_id]).difference(hist_cq_set))
+            candi_cq_list = [x for x in candidate_cq_dic[topic_facet_id] if x not in hist_cq_set]
+
             if len(candi_cq_list) == 0: #in case the candidate list is empty, query 115 doesn't matching any clarifying question. 
                 continue
             topic, _ = topic_facet_id.split('-')
@@ -69,7 +71,9 @@ class ClarifyQuestionDataset(Dataset):
             prod_data.candidate_cq_dic, global_data.cq_cq_rank_dic)
 
         train_data = []
-        for hist_len in range(self.args.max_hist_turn):
+        # for hist_len in range(self.args.max_hist_turn):
+        for hist_len in range(self.args.min_hist_turn, self.args.max_hist_turn):
+
             entries = self.select_neg_samples(prod_data, hist_len)
             for topic_facet_id, hist_cqs, pos_cq, other_cq, neg_cq in entries:
             # for topic_facet_id, hist_cqs, pos_cq, neg_cq in entries:
@@ -79,7 +83,7 @@ class ClarifyQuestionDataset(Dataset):
                 #         topic, hist_cqs)
                 # doc_list = doc_list[:topk]
                 cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
-                # cq_list = [x for x in cq_list if x not in set(hist_cqs)]
+                cq_list = [x for x,y in cq_list if x not in set(hist_cqs)]
                 cq_list = cq_list[:self.args.cq_topk]
                 if len(cq_list) == 0:
                     print(topic_facet_id)
@@ -127,7 +131,7 @@ class ClarifyQuestionDataset(Dataset):
         cur_no = 0
         for topic_facet_id in prod_data.pos_cq_dic:
             cur_pos_set, other_pos_set = prod_data.pos_cq_dic[topic_facet_id]
-            candi_cq_set = prod_data.candidate_cq_dic[topic_facet_id]
+            candi_cq_set = set(prod_data.candidate_cq_dic[topic_facet_id])
             candi_cq_set = candi_cq_set.difference(cur_pos_set).difference(other_pos_set)
             global_candi_set = all_cq_set.difference(cur_pos_set).difference(other_pos_set)
             hist_cqs_set = set()

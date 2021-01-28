@@ -47,7 +47,7 @@ class Trainer(object):
             if self.args.selector == "none":
                 self.ExpDataset = ClarifyQuestionDataset
                 self.ExpDataloader = ClarifyQuestionDataloader
-            if self.args.selector == "plain":
+            elif self.args.selector == "plain":
                 self.ExpDataset = MultiTurnDataset
                 self.ExpDataloader = MultiTurnDataloader
             else:
@@ -271,6 +271,8 @@ class Trainer(object):
                 candi_cqs = []
                 hist_cq_set = set([cq for cq,score in tf_top_cq_dic.get(tfid, [])])
                 candi_cq_set = set([cq for cq, score in tf_candi_cq_dic[tfid]]).difference(hist_cq_set)
+                if len(candi_cq_set) == 0:
+                    continue
                 for candi_cq in candi_cq_set:
                     candi_cqs.append(candi_cq)
                     scores = []
@@ -290,12 +292,20 @@ class Trainer(object):
                             scores.append(sim_wrt_hist)
                     candi_scores.append(scores)
                 candi_scores = torch.tensor(candi_scores).to(args.device)
-                t_sim = torch.log(sigmoid(candi_scores[:,0] * args.sigmoid_t))
-                hist_sim = torch.log(1 - sigmoid(candi_scores[:, 1:] * args.sigmoid_cq))
+                # t_sim = torch.log(sigmoid(candi_scores[:,0] * args.sigmoid_t))
+                # t_sim = sigmoid(candi_scores[:, 0] * args.sigmoid_t)
+                t_sim = candi_scores[:, 0]
+                # hist_sim = torch.log(1 - sigmoid(candi_scores[:, 1:] * args.sigmoid_cq))
+                # hist_sim = sigmoid(candi_scores[:, 1:] * args.sigmoid_cq)
+                hist_sim = candi_scores[:, 1:]
                 # print(tfid, t_sim)
                 # print(tfid, tf_top_cq_dic.get(tfid, None), hist_sim)
                 if hist_sim.size(-1) > 0:
-                    sim = t_sim * args.tweight + hist_sim.mean(dim=-1) * (1 - args.tweight)
+                    # sim = t_sim * args.tweight + hist_sim.mean(dim=-1) * (1 - args.tweight)
+                    max_sim, _ = hist_sim.max(dim=-1)
+                    # max_sim, _ = hist_sim.min(dim=-1)
+                    # sim = t_sim * args.tweight + max_sim * (1 - args.tweight)
+                    sim = t_sim * args.tweight - max_sim * (1 - args.tweight)
                 else:
                     sim = t_sim
                 sorted_scores = list(zip(candi_cqs, sim.cpu().tolist()))

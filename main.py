@@ -46,7 +46,8 @@ def parse_args():
             help="whether to collect ranklist for cqs.")
     parser.add_argument("--fix_scorer", type=str2bool, nargs='?',const=True,default=True,
             help="whether to fix the initial model for relevance matching.")
-    parser.add_argument("--rerank", type=str2bool, nargs='?',const=True,default=False,
+    parser.add_argument("--inter_embed_size", type=int, default=1, help="Size of each embedding after transformers.")
+    parser.add_argument("--rerank", type=str2bool, nargs='?',const=True,default=True,
             help="whether to rerank results from initial retrieval.")
     parser.add_argument("--rankfname", default="test.best_model.ranklist")
     parser.add_argument("--dropout", default=0.1, type=float)
@@ -114,12 +115,14 @@ def parse_args():
                             help="The number of documents used for reference.")
     parser.add_argument("--rank_cutoff", type=int, default=5,
                             help="Rank cutoff for output ranklists.")
-    parser.add_argument("--eval_k", type=int, default=3,
+    parser.add_argument("--eval_k", type=int, default=5,
                             help="Iteration for the clarifying questions.")
     parser.add_argument("--eval_pos", type=int, default=5,
                             help="Evaluation Position for NDCG, Precision, and Recall.")
     parser.add_argument("--max_hist_turn", type=int, default=3,
-                            help="Iteration for the clarifying questions.")
+                            help="Maximum Iteration for the clarifying questions.")
+    parser.add_argument("--min_hist_turn", type=int, default=1,
+                            help="Minimum Iteration for the clarifying questions.")
     parser.add_argument("--max_episode_len", type=int, default=5,
                             help="Iteration for the clarifying questions.")
     parser.add_argument("--gamma", type=float, default=0.9,
@@ -152,14 +155,24 @@ def create_model(args, load_path='', partial=False):
                 setattr(args, k, opt[k])
         # args.start_epoch = checkpoint['epoch']
         if partial:
-            model.cq_bert_ranker.load_cp(checkpoint)
-            if args.fix_scorer:
-                logger.info("fix the initial model with BERT")
-                #for param in self.bert.model.parameters():
-                for param in model.cq_bert_ranker.parameters():
-                    param.requires_grad = False
+            model.cq_bert_ranker.load_cp(checkpoint, strict=False)
+            # if args.fix_scorer:
+            #     logger.info("fix the initial model with BERT")
+            #     # for param in model.cq_bert_ranker.parameters():
+            #     for param in model.cq_bert_ranker.bert.parameters(): # wo not fixed
+            #         param.requires_grad = False
         else:
-            model.load_cp(checkpoint)
+            model.load_cp(checkpoint, strict=False)
+        if args.fix_scorer:
+            logger.info("fix BERT in %s" % (type(model)))
+            if type(model) == ClarifyQuestionRanker:
+                for param in model.bert.parameters(): # wo not fixed
+                    param.requires_grad = False
+            elif type(model) == ContextRanker:
+                for param in model.cq_bert_ranker.bert.parameters(): # wo not fixed
+                # for param in model.cq_bert_ranker.parameters(): # wo fixed
+                    param.requires_grad = False
+
         optim = build_optim(args, model, None)
         # optim = build_optim(args, model, checkpoint)
     else:
@@ -180,7 +193,8 @@ def train(args):
 
     global_data = GlobalConvSearchData(args, args.data_dir)
     if os.path.exists(args.init_model):
-        model, optim = create_model(args, args.init_model, partial=True)
+        partial = False if args.selector == "none" else True
+        model, optim = create_model(args, args.init_model, partial=partial)
     else:
         model, optim = create_model(args, args.train_from)
     if args.rl:
@@ -226,8 +240,10 @@ def test(args):
     global_data = GlobalConvSearchData(args, args.data_dir)
     test_conv_data = ConvSearchData(args, args.input_train_dir, "test", global_data)
     model_path = os.path.join(args.save_dir, 'model_best.ckpt')
-    best_model, _ = create_model(args, model_path)
-    # best_model, _ = create_model(args, args.train_from)
+    if os.path.exists(args.train_from):
+        best_model, _ = create_model(args, args.train_from)
+    else:
+        best_model, _ = create_model(args, model_path)
     trainer = Trainer(args, best_model, None)
     trainer.test(args, global_data, test_conv_data, args.rankfname)
 

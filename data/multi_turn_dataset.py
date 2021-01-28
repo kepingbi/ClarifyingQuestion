@@ -70,9 +70,11 @@ class MultiTurnDataset(Dataset):
         # query -> question+, question-
         # topk = self.args.doc_topk
         train_data = []
-        for hist_len in range(1, self.args.max_hist_turn):
+        for hist_len in range(self.args.min_hist_turn, self.args.max_hist_turn):
+        # for hist_len in range(self.args.max_hist_turn):
             # must have historical cq
-            entries = self.select_neg_samples(prod_data, hist_len)
+            entries = self.select_neg_samples_triples(prod_data, hist_len)
+
             for topic_facet_id, hist_cqs, cq_tuples, labels in entries:
             # for topic_facet_id, hist_cqs, pos_cq, neg_cq in entries:
                 topic, _ = topic_facet_id.split('-')
@@ -128,6 +130,8 @@ class MultiTurnDataset(Dataset):
         # calculate similarity based on the portion of same documents ranked in top k documents. 
         max_sim = 0.
         for cq in hist_cqs:
+            if cq not in cq_top_cq_info_dic:
+                continue
             if cur_cq in cq_top_cq_info_dic[cq]:
                 rank = cq_top_cq_info_dic[cq][cur_cq]
                 sim = 1 / rank
@@ -136,9 +140,24 @@ class MultiTurnDataset(Dataset):
             max_sim = max(max_sim, sim)
         return max_sim
 
+    @staticmethod
+    def cq_similarity_sigmoid(candi_sim_wrt_tq_dic, hist_cqs, cur_cq, sigmoid_k):
+        max_sim = 0.
+        tid, qid = cur_cq.split('-')
+        for cq in hist_cqs:
+            if cq not in candi_sim_wrt_tq_dic[cur_cq][tid]:
+                sim_wrt_hist = torch.tensor(0.)
+            else:
+                sim_wrt_hist = candi_sim_wrt_tq_dic[cur_cq][tid][cq]
+                sim_wrt_hist = torch.sigmoid(torch.tensor(sim_wrt_hist * sigmoid_k))
+            max_sim = max(max_sim, sim_wrt_hist)
+        return max_sim
+
     def select_neg_samples_triples(self, prod_data, hist_len):
         # hist_len: 0,1,2,3
         # cq:1->cq:2; cq:0->cq:2
+        candi_sim_wrt_tq_dic = self.global_data.collect_candidate_sim_wrt_tq(
+            prod_data.candidate_cq_dic, self.global_data.cq_cq_rank_dic)
         entries = []
         all_cq_set = set(self.global_data.clarify_q_dic.keys())
         rand_numbers = np.random.random(len(prod_data.pos_cq_dic) * 5)
@@ -146,7 +165,7 @@ class MultiTurnDataset(Dataset):
         cur_no = 0
         for topic_facet_id in prod_data.pos_cq_dic:
             cur_pos_set, other_pos_set = prod_data.pos_cq_dic[topic_facet_id]
-            candi_cq_set = prod_data.candidate_cq_dic[topic_facet_id]
+            candi_cq_set = set(prod_data.candidate_cq_dic[topic_facet_id])
             candi_cq_set = candi_cq_set.difference(cur_pos_set).difference(other_pos_set)
             global_candi_set = all_cq_set.difference(cur_pos_set).difference(other_pos_set)
             hist_cqs_set = set()
@@ -171,7 +190,12 @@ class MultiTurnDataset(Dataset):
                 if len(candi_cq_set) == 0:
                     candi_cq_set = global_candi_set.difference(hist_cqs_set)
                 neg_cq = random.sample(candi_cq_set, 1)
-                entries.append([topic_facet_id, hist_cqs, pos_cq, other_cq[0], neg_cq[0]])
+                # label = 1 - self.cq_similarity(self.global_data.cq_top_cq_info_dic, hist_cqs, other_cq[0])
+                # label = 1 - self.cq_similarity_sigmoid(candi_sim_wrt_tq_dic, hist_cqs, other_cq[0], self.args.sigmoid_cq)
+                label = 1.
+                entries.append([topic_facet_id, hist_cqs, \
+                    [pos_cq, other_cq[0], neg_cq[0]],[4., label, 0.]])
+
                 # entries.append([topic_facet_id, hist_cqs, pos_cq, other_cq[0]])
                 # entries.append([topic_facet_id, hist_cqs, pos_cq, neg_cq[0]])
                 # entries.append([topic_facet_id, hist_cqs, other_cq[0], neg_cq[0]])
