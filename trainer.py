@@ -25,7 +25,7 @@ class Trainer(object):
     """
     Class that controls the training process.
     """
-    def __init__(self, args, model, optim, grad_accum_count=1, 
+    def __init__(self, args, model, optim, grad_accum_count=1,
                 n_gpu=1, gpu_rank=1, report_manager=None):
         # Basic attributes.
         self.args = args
@@ -117,6 +117,7 @@ class Trainer(object):
                 best_checkpoint_path = os.path.join(model_dir, 'model_best.ckpt')
                 logger.info("Copying %s to checkpoint %s" % (checkpoint_path, best_checkpoint_path))
                 shutil.copyfile(checkpoint_path, best_checkpoint_path)
+            os.remove(checkpoint_path)
         return best_checkpoint_path
 
     def _save(self, epoch, checkpoint_path):
@@ -143,7 +144,7 @@ class Trainer(object):
         k = args.eval_k
         cutoff = args.rank_cutoff
         sorted_tf_cq_scores = self.infer_k_iter(args, global_data, test_conv_data, "Test", k, cutoff)
-        self.calc_metrics(sorted_tf_cq_scores, test_conv_data.pos_cq_dic, cutoff)
+        self.calc_metrics(sorted_tf_cq_scores, test_conv_data.pos_cq_dic, cutoff, "Test")
         rankfname = "%s.%diter.len%d" % (rankfname, k, cutoff)
         if args.init_cq:
             rankfname += ".cq"
@@ -151,6 +152,7 @@ class Trainer(object):
             rankfname += ".ql"
         if args.rerank:
             rankfname += ".rerank"
+        rankfname += ".top%d" % args.rerank_topk
         output_path = os.path.join(args.save_dir, rankfname)
         self.write_ranklist(output_path, sorted_tf_cq_scores, cutoff)
 
@@ -166,10 +168,10 @@ class Trainer(object):
                             % (tfid, cq_id, rank+1, score, model_name)
                     rank_fout.write(line)
 
-    def calc_metrics(self, sorted_tf_cq_scores, pos_cq_dic, cutoff=100):
+    def calc_metrics(self, sorted_tf_cq_scores, pos_cq_dic, cutoff=100, etype='Valid'):
         ndcg, mrr, prec, recall = 0, 0, 0, 0
         eval_pos = self.eval_pos
-        for tfid in sorted_tf_cq_scores: # queries with no 
+        for tfid in sorted_tf_cq_scores: # queries with no
             cur_pos_dic, other_pos_dic = pos_cq_dic.get(tfid, [[],[]])
             ranklist = [2 if x in cur_pos_dic \
                 else 1 if x in other_pos_dic else 0 for x, score in sorted_tf_cq_scores[tfid]]
@@ -189,9 +191,9 @@ class Trainer(object):
         prec /= eval_count
         recall /= eval_count
         logger.info(
-            "EvalCount:{} NDCG@{}:{} P@{}:{} R@{}:{} MRR:{}".format(
-                eval_count, eval_pos, ndcg, eval_pos, prec, eval_pos, recall, mrr))
-        # some topic_facet_id could have no cur_pos_cq (with label 2), 
+            "{} EvalCount:{} NDCG@{}:{} P@{}:{} R@{}:{} MRR:{}".format(
+                etype, eval_count, eval_pos, ndcg, eval_pos, prec, eval_pos, recall, mrr))
+        # some topic_facet_id could have no cur_pos_cq (with label 2),
         # but they still have other_pos_cq with label 1.
         return ndcg, prec, recall, mrr
 
@@ -247,7 +249,7 @@ class Trainer(object):
             for rank in range(len(tf_top_cq_dic[tfid])):
                 # print(rank, len(tf_top_cq_dic[tfid]), tf_top_cq_dic[tfid][rank])
                 if k > 1 and tf_top_cq_dic[tfid][rank][0] in cur_pos_dic:
-                    # iterative interaction, when label-2 cq is find, stop iterating. 
+                    # iterative interaction, when label-2 cq is find, stop iterating.
                     tf_top_cq_dic[tfid] = tf_top_cq_dic[tfid][:rank+1]
                     break
         return tf_top_cq_dic
@@ -328,7 +330,7 @@ class Trainer(object):
                 # print(rank, len(tf_top_cq_dic[tfid]), tf_top_cq_dic[tfid][rank])
                 # if k > 1 and tf_top_cq_dic[tfid][rank][0] in cur_pos_dic:
                 if tf_top_cq_dic[tfid][rank][0] in cur_pos_dic:
-                    # iterative interaction, when label-2 cq is find, stop iterating. 
+                    # iterative interaction, when label-2 cq is find, stop iterating.
                     tf_top_cq_dic[tfid] = tf_top_cq_dic[tfid][:rank+1]
                     break
         return tf_top_cq_dic
