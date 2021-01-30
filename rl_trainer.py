@@ -25,14 +25,14 @@ class RLTrainer(Trainer):
     """
     Class that controls the training process.
     """
-    def __init__(self, args, model, optim, grad_accum_count=1, 
+    def __init__(self, args, model, optim, grad_accum_count=1,
                 n_gpu=1, gpu_rank=1, report_manager=None):
-        super(RLTrainer, self).__init__(args, model, optim, grad_accum_count, 
+        super(RLTrainer, self).__init__(args, model, optim, grad_accum_count,
                 n_gpu, gpu_rank, report_manager)
         # Basic attributes.
 
     def train(self, args, global_data, train_conv_data, valid_conv_data):
-        """ Train the model with reinforce. 
+        """ Train the model with reinforce.
         """
         logger.info('Start training...')
         train_conv_data.reset_set_name("TrainInference")
@@ -107,7 +107,7 @@ class RLTrainer(Trainer):
         # print("rewards", discounted_rewards)
         for t in reversed(range(steps - 1)):
             discounted_rewards[t] += discounted_rewards[t+1] * self.args.gamma
-        
+
         discounted_rewards = np.asarray(discounted_rewards)
         # discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-9) # normalize discounted rewards
         # do not use this to stablize training
@@ -165,7 +165,7 @@ class RLTrainer(Trainer):
             # model still be train(); using train mode to get scores so that the loss can be back-propagated
             tfid = list(sorted_tf_cq_scores.keys())[0]
             assert tfid == topic_facet_id
-            
+
             # cq_probs = torch.tensor([y for x,y in sorted_tf_cq_scores[tfid]])
             cq_probs = torch.stack([y for x,y in sorted_tf_cq_scores[tfid]])
             cq_probs = torch.softmax(cq_probs, dim=-1) # only 1 dimension
@@ -181,10 +181,14 @@ class RLTrainer(Trainer):
                 reward = -1.
                 # reward = 0.
                 hist_cqs = [x for x,y in tf_top_cq_dic[tfid]]
-                # reward = - MultiTurnDataset.cq_similarity(
-                #     global_data.cq_top_cq_info_dic, hist_cqs, cq)
+                if args.punish_sim:
+                    reward = - MultiTurnDataset.cq_similarity(
+                            global_data.cq_top_cq_info_dic, hist_cqs, cq)
             else:
                 reward = -2.
+            if args.punish_turns:
+                reward -= 1 * (1.2 ** len(tf_top_cq_dic[tfid]) - 1)
+
             # delta NDCG can be used as reward
             tf_top_cq_dic[tfid].append((cq, score))
             tf_episode.append(ActionReward(cq, torch.log(cq_probs[cq_id]), reward))

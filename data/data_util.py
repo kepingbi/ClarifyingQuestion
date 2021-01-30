@@ -39,13 +39,14 @@ class ConvSearchData():
         # self.candidate_cq_dic = new_candi_cq_dic
         self.all_candidate_cq_dic = self.candidate_cq_dic
         if os.path.exists(args.init_rankfile):
-            self.all_candidate_cq_dic = global_data.read_topic_cq_ranklist(args.init_rankfile)
+            read_score = True if args.mode == "baseline" else False
+            self.all_candidate_cq_dic = global_data.read_topic_cq_ranklist(args.init_rankfile, read_score)
             for topic_facet_id in self.all_candidate_cq_dic:
                 self.all_candidate_cq_dic[topic_facet_id] = self.all_candidate_cq_dic[topic_facet_id][:self.args.rerank_topk]
             self.candidate_cq_dic = dict()
             for topic_facet_id in self.pos_cq_dic:
                 self.candidate_cq_dic[topic_facet_id] = self.all_candidate_cq_dic[topic_facet_id]
-       
+
         logger.info("ConvSearchData loaded completely!")
 
     def initialize_epoch(self):
@@ -130,7 +131,7 @@ class GlobalConvSearchData():
         self.cq_doc_rank_dic = self.read_topic_cq_ranklist(topic_cq_doc_rankfile)
         logger.info("Loading %s" % topic_cq_cq_rankfile)
         self.cq_cq_rank_dic = self.read_topic_cq_ranklist(topic_cq_cq_rankfile)
-    
+
         self.cq_top_doc_info_dic = dict()
         self.cq_top_cq_info_dic = dict()
         for qid in self.cq_doc_rank_dic:
@@ -139,7 +140,7 @@ class GlobalConvSearchData():
             self.cq_top_cq_info_dic[qid] = {cq:rank+1 for rank, (cq,score) in enumerate(self.cq_cq_rank_dic[qid])}
 
         logger.info("GlobalConvSearchData loaded completely" )
-    
+
     # def read_id_content_json(self, cq_file):
     #     count = 0
     #     with gzip.open(cq_file, 'rt') as fin:
@@ -192,7 +193,7 @@ class GlobalConvSearchData():
                 if topic_id not in topic_dic:
                     tokens = self.tokenizer.tokenize(topics[e_id])
                     topic_dic[topic_id] = self.tokenizer.convert_tokens_to_ids(tokens)
-                
+
                 topic_facet_id = "%s-%s" % (topic_id, facet_id)
                 global_qid = "%s-%s" % (topic_id, qid)
                 if topic_facet_id not in answer_dic:
@@ -201,7 +202,7 @@ class GlobalConvSearchData():
                 answer_dic[topic_facet_id][global_qid] = self.tokenizer.convert_tokens_to_ids(tokens)
         return topic_dic, answer_dic
 
-    def read_topic_cq_ranklist(self, rank_file):
+    def read_topic_cq_ranklist(self, rank_file, read_score=True):
         topic_ranklist_dic = defaultdict(list)
         with open(rank_file, 'r') as frank:
             for line in frank:
@@ -211,5 +212,9 @@ class GlobalConvSearchData():
                 #     qid = segs[0].split('-')[0]
                 doc_id = segs[2]
                 score = float(segs[4])
-                topic_ranklist_dic[qid].append((doc_id, score))
+                if read_score:
+                    topic_ranklist_dic[qid].append((doc_id, score))
+                else:
+                    topic_ranklist_dic[qid].append(doc_id)
+
         return topic_ranklist_dic

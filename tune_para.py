@@ -37,25 +37,33 @@ paras = [
     # train 4,1,0 bert with hist_turn=0; fix bert
     #(1, 'A', 'plain_transformer', 'none', 'F', 'F', 'T', 'T', 0, 1, 'noam', 0.001, 800, 5, 2, 4, 1, 10, 'train', 'F', 1, 5, 5),
     # based on 0,1 trained bert, train selector
-    #(2, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 0, 3, 'noam', 0.001, 800, 5, 2, 4, 1, 50),
-    (1, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
-    (3, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
-    (4, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
+    #(1, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 0, 3, 'noam', 0.001, 800, 5, 2, 4, 1, 50),
+    # based on 4,1,0 trained bert, train selector
+    #(1, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
 
-    (1, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
-    (3, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
-    (4, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
+    (2, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50), #select
+    (3, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'noam', 0.001, 800, 5, 2, 4, 1, 50), #select
+    (4, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50), #select
+    (5, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50), #select
 
-    (1, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
-    (3, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
-    (4, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
+    #(1, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
+    #(3, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
+    #(4, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50), #select
 
-    (1, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
-    (3, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
-    (4, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
+    #(1, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
+    #(3, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
+    #(4, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
+
+    #(1, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
+    #(3, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
+    #(4, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
+
+    #(1, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
+    #(3, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
+    #(4, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
     #(2, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'noam', 0.0005, 800, 5, 2, 4, 1, 50),
     #(2, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'noam', 0.001, 500, 5, 2, 4, 1, 50),
-    #(2, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
+    #(2, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50), #select
     #(2, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
     #(2, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.00005, 800, 5, 2, 4, 1, 50),
     # based on 4,1,0 trained bert, train selector
@@ -74,11 +82,11 @@ paras = [
     #(5, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.00005, 800, 5, 2, 4, 1, 50),
     #(5, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'noam', 0.0005, 800, 5, 2, 4, 1, 50),
     #(5, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'noam', 0.001, 500, 5, 2, 4, 1, 50),
-    #(5, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50),
+    #(5, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0005, 800, 5, 2, 4, 1, 50), #select
     #(5, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.0001, 800, 5, 2, 4, 1, 50),
     #(5, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'adam', 0.00005, 800, 5, 2, 4, 1, 50),
     #(3, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 0, 3, 'noam', 0.001, 800, 5, 2, 4, 1, 50),
-    #(3, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'noam', 0.001, 800, 5, 2, 4, 1, 50),
+    #(3, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'noam', 0.001, 800, 5, 2, 4, 1, 50), # select
     #(3, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 0, 3, 'noam', 0.001, 800, 5, 2, 4, 1, 50),
     #(3, 'B', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 1, 3, 'noam', 0.001, 800, 5, 2, 4, 1, 50),
     #(4, 'A', 'plain_transformer', 'plain', 'F', 'F', 'T', 'T', 0, 3, 'noam', 0.001, 800, 5, 2, 4, 1, 50),
@@ -129,7 +137,10 @@ if __name__ == '__main__':
         cmd = " " .join(cmd_arr)
         cmd_arr.append("--mode test")
         #cmd_arr.append("--rerank_topk 50")
-        test1_cmd = " ".join(cmd_arr + ["--eval_k 1"])
+        test_cmd = []
+        for i in range(1, 5):
+            test_cmd.append(" ".join(cmd_arr + ["--eval_k %d --rank_cutoff %d --eval_pos %d" % (i,i,i)]))
+        #test1_cmd = " ".join(cmd_arr + ["--eval_k 1"])
         #test2_cmd = " ".join(cmd_arr + ["--eval_k 5"])
         #print(cmd)
         #os.system(cmd)
@@ -140,12 +151,11 @@ if __name__ == '__main__':
             fout.write("#SBATCH --output=%s/%s/%s.txt\n" % (args.log_dir, dataset, model_name))
             fout.write("#SBATCH -e %s/%s/%s.err.txt\n" % (args.log_dir, dataset, model_name))
             fout.write("\n")
-            fout.write(cmd)
-            fout.write("\n")
-            fout.write(test1_cmd)
-            fout.write("\n")
-            #fout.write(test2_cmd)
-            fout.write("\n")
+            #fout.write("%s\n" % cmd)
+            #fout.write("%s\n" % test1_cmd)
+            for i in range(len(test_cmd)):
+                fout.write("%s\n" % test_cmd[i])
+            #fout.write("%s\n" % test2_cmd)
             fout.write("exit\n")
 
         fscript.write("sbatch %s\n" % fname)

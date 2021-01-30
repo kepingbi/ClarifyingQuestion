@@ -40,6 +40,10 @@ def parse_args():
             choices=['concat', 'numeric'], help="which type of model is used as selector")
     parser.add_argument("--rl", type=str2bool, nargs='?',const=True,default=False,
             help="whether to use reinforcement learning to train.")
+    parser.add_argument("--punish_sim", type=str2bool, nargs='?',const=True,default=False,
+            help="whether to punish grade-1 cq in reinforcement learning.")
+    parser.add_argument("--punish_turns", type=str2bool, nargs='?',const=True,default=False,
+            help="whether to punish long turns in reinforcement learning.")
     parser.add_argument("--init", type=str2bool, nargs='?',const=True,default=False,
             help="whether to train a model for initial retrieval.")
     parser.add_argument("--init_cq", type=str2bool, nargs='?',const=True,default=False,
