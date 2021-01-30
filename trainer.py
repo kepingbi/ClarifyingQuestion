@@ -248,7 +248,7 @@ class Trainer(object):
             # print(tf_top_cq_dic[tfid])
             for rank in range(len(tf_top_cq_dic[tfid])):
                 # print(rank, len(tf_top_cq_dic[tfid]), tf_top_cq_dic[tfid][rank])
-                if k > 1 and tf_top_cq_dic[tfid][rank][0] in cur_pos_dic:
+                if args.rank_cutoff < 50 and tf_top_cq_dic[tfid][rank][0] in cur_pos_dic:
                     # iterative interaction, when label-2 cq is find, stop iterating.
                     tf_top_cq_dic[tfid] = tf_top_cq_dic[tfid][:rank+1]
                     break
