@@ -75,12 +75,18 @@ class ClarifyQuestionRanker(nn.Module):
             self.transformer_encoder = TransformerRefEncoder(
                 self.embedding_size, args.ff_size, \
                     args.heads, args.dropout, args.inter_layers)
-        elif self.args.model_name == "plain_transformer":
-                self.wo = nn.Linear(self.embedding_size, 1, bias=True)
-                if self.args.inter_embed_size > 1:
-                    self.wo1 = nn.Linear(self.embedding_size, self.args.inter_embed_size, bias=True)
-                    self.wo2 = nn.Linear(self.args.inter_embed_size, 1, bias=True)
-        
+        else:
+        # elif self.args.model_name == "plain_transformer":
+            self.wo = nn.Linear(self.embedding_size, 1, bias=True)
+            if self.args.inter_embed_size > 1:
+                self.wo1 = nn.Linear(self.embedding_size, self.args.inter_embed_size, bias=True)
+                self.wo2 = nn.Linear(self.args.inter_embed_size, 1, bias=True)
+            if self.args.model_name == "avg_transformer":
+                    self.double_wo = nn.Linear(2 * self.embedding_size, 1, bias=True)
+                    if self.args.inter_embed_size > 1:
+                        self.double_wo1 = nn.Linear(2 * self.embedding_size, self.args.inter_embed_size, bias=True)
+                        self.double_wo2 = nn.Linear(self.args.inter_embed_size, 1, bias=True)
+
         self.logsoftmax = torch.nn.LogSoftmax(dim=-1)
 
         #for each q,u,i
@@ -132,6 +138,29 @@ class ClarifyQuestionRanker(nn.Module):
                 scores = self.wo(cls_vecs)
             else:
                 scores = self.wo2(torch.relu(self.wo1(cls_vecs)))
+        elif self.args.model_name == "avg_transformer":
+            first_vecs = query_vecs.view(batch_size, candi_size, seq_length, -1)[:,:,0,:]
+            hist_cq_count = batch_data.cls_idxs.size(-1)
+            if hist_cq_count > 0:
+                cls_idxs = batch_data.cls_idxs.unsqueeze(1).expand(-1, candi_size, -1)
+                cls_idxs = cls_idxs.contiguous().view(-1, hist_cq_count)
+                hist_cq_vecs = query_vecs[torch.arange(batch_size*candi_size).unsqueeze(1), cls_idxs]
+                # batch_size * candi_size, hist_cq_count, embedding_size
+                cls_masks = cls_idxs.ne(0).unsqueeze(-1).float()
+                hist_cq_vecs = hist_cq_vecs * cls_masks
+                avg_hist_cq_vecs = torch.sum(hist_cq_vecs * cls_masks, dim=1) / cls_masks.sum(dim=1)
+                # batch_size * candi_size, embedding_size
+                avg_hist_cq_vecs = avg_hist_cq_vecs.view(batch_size, candi_size, -1)
+                final_hidden = torch.cat([first_vecs, avg_hist_cq_vecs], dim=-1)
+                if self.args.inter_embed_size == 1:
+                    scores = self.double_wo(final_hidden)
+                else:
+                    scores = self.double_wo2(torch.relu(self.double_wo1(final_hidden)))
+            else:
+                if self.args.inter_embed_size == 1:
+                    scores = self.wo(first_vecs)
+                else:
+                    scores = self.wo2(torch.relu(self.wo1(first_vecs)))
 
         # batch_size * candi_size
         scores = scores.view(batch_size, candi_size)
@@ -154,15 +183,26 @@ class ClarifyQuestionRanker(nn.Module):
             logger.info(" CQRanker initialization started.")
         if hasattr(self, "transformer_encoder"):
             self.transformer_encoder.initialize_parameters(logger)
-        if hasattr(self, "wo"):
-            nn.init.xavier_normal_(self.wo.weight)
-            nn.init.constant_(self.wo.bias, 0)
-        if self.args.inter_embed_size > 1:
-            nn.init.xavier_normal_(self.wo1.weight)
-            nn.init.constant_(self.wo1.bias, 0)
-            nn.init.xavier_normal_(self.wo2.weight)
-            nn.init.constant_(self.wo2.bias, 0)
-
+        # if hasattr(self, "wo"):
+        #     nn.init.xavier_normal_(self.wo.weight)
+        #     nn.init.constant_(self.wo.bias, 0)
+        # if self.args.inter_embed_size > 1:
+        #     nn.init.xavier_normal_(self.wo1.weight)
+        #     nn.init.constant_(self.wo1.bias, 0)
+        #     nn.init.xavier_normal_(self.wo2.weight)
+        #     nn.init.constant_(self.wo2.bias, 0)
+        for name, p in self.named_parameters():
+            if "wo" in name:
+                if p.dim() > 1:
+                    if logger:
+                        logger.info(" {} ({}): Xavier normal init.".format(
+                            name, ",".join([str(x) for x in p.size()])))
+                    nn.init.xavier_normal_(p)
+                else:
+                    nn.init.constant_(p, 0)
+                    if logger:
+                        logger.info(" {} ({}): constant (0) init.".format(
+                            name, ",".join([str(x) for x in p.size()])))
         if logger:
             logger.info(" CQRanker initialization finished.")
 

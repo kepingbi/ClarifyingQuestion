@@ -85,8 +85,8 @@ class ClarifyQuestionDataset(Dataset):
                 cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
                 cq_list = [x for x,y in cq_list if x not in set(hist_cqs)]
                 cq_list = cq_list[:self.args.cq_topk]
-                if len(cq_list) == 0:
-                    print(topic_facet_id)
+                # if len(cq_list) == 0:
+                #     print(topic_facet_id)
                 # only calculate this for those with label 1
                 # other_cq_sim = self.cq_similarity(global_data.cq_doc_rank_dic, hist_cqs, other_cq)
                 # train_data.append([topic_facet_id, hist_cqs, doc_list, \

@@ -33,7 +33,8 @@ def parse_args():
     parser.add_argument("--init_rankfile", default='')
     parser.add_argument("--rerank_topk", type=int, default=50, help="rerank how many cqs to use during interactions")
     parser.add_argument("--model_name", default='plain_transformer',
-            choices=['ref_transformer', 'plain_transformer'], help="which type of model is used to train")
+            choices=['ref_transformer', 'plain_transformer', 'avg_transformer'],
+            help="which type of model is used to train")
     parser.add_argument("--selector", default='none',
             choices=['ref', "wref", 'plain', "none"], help="which type of model is used as selector")
     parser.add_argument("--sel_struct", default='concat',
@@ -141,8 +142,8 @@ def create_model(args, load_path='', partial=False):
     """Create model and initialize or load parameters in session."""
         #global_data and conv_data not used yet
     if args.selector == "none":
-        if args.model_name == "ref_transformer" or args.model_name == "plain_transformer":
-            model = ClarifyQuestionRanker(args, args.device)
+        # if args.model_name == "ref_transformer" or args.model_name == "plain_transformer":
+        model = ClarifyQuestionRanker(args, args.device)
     elif args.selector == "plain":
         model = ContextRanker(args, args.device)
     else:

@@ -35,6 +35,7 @@ class ClarifyQuestionDataloader(DataLoader):
         hist_cq_ids = [entry[1] for entry in batch] # batch_size, hist_cq_count
         candi_cq_ids = [entry[3] for entry in batch]
         candi_labels = []
+        batch_cls = []
         if len(batch[0]) > 4:
             candi_labels = [entry[4] for entry in batch]
 
@@ -42,13 +43,14 @@ class ClarifyQuestionDataloader(DataLoader):
         for i in range(len(batch)):
             entry = batch[i]
             word_seq = [self.cls_vid] + topic_queries[i]
-            seg_id = [0] * len(word_seq)
             for cq in entry[1]: #hist_cqs
-                word_seq.extend([self.sep_vid] + self.global_data.clarify_q_dic[cq])
+                word_seq.extend([self.sep_vid, self.cls_vid] + self.global_data.clarify_q_dic[cq])
                 if cq in self.global_data.answer_dic[topic_facet_ids[i]]:
                     # if this q is for other topic, it will not have corresponding answer. 
                     word_seq.extend([self.sep_vid] + self.global_data.answer_dic[topic_facet_ids[i]][cq])
-            seg_id += [0] * (len(word_seq) - len(seg_id))
+
+            batch_cls.append([idx for idx in range(1, len(word_seq)) if word_seq[idx] == self.cls_vid])
+            seg_id = [0] * len(word_seq)
             '''
             cur_ref_doc_words = []
             for doc in entry[2]:
@@ -65,10 +67,10 @@ class ClarifyQuestionDataloader(DataLoader):
             if len(entry[2]) > 0:
                 ref_doc_words.append([[self.cls_vid] + self.global_data.clarify_q_dic[cq] for cq in entry[2]])
             else:
-                print(entry[0])
+                # print(entry[0])
                 topic, _ = entry[0].split('-')
                 cq_list = self.global_data.cq_cq_rank_dic["%s-X" % topic]
-                print(cq_list[:10])
+                # print(cq_list[:10])
                 ref_doc_words.append([[self.pad_vid]])
             per_candi_cq, per_candi_seg = [], []
             for cq in entry[3]: # candidate cq
@@ -85,7 +87,9 @@ class ClarifyQuestionDataloader(DataLoader):
         candi_cq_words = util.pad_3d(candi_cq_words, self.pad_vid, dim=2)
         ref_doc_words = util.pad_3d(ref_doc_words, self.pad_vid, dim=1)
         ref_doc_words = util.pad_3d(ref_doc_words, self.pad_vid, dim=2)
+        batch_cls = util.pad(batch_cls, 0) # batch_size, hist_cq_count
         batch = ClarifyQuestionBatch(
             topic_facet_ids, candi_cq_ids, hist_cq_ids, candi_labels, \
-                candi_cq_words, candi_seg_ids, ref_doc_words)
+                candi_cq_words, candi_seg_ids, ref_doc_words=ref_doc_words,\
+                    cls_idxs=batch_cls)
         return batch
