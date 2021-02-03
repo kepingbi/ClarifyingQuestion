@@ -106,6 +106,13 @@ class ClarifyQuestionRanker(nn.Module):
         candi_scores, candi_cq_mask = self.get_candi_cq_scores(batch_data)
         return candi_scores, candi_cq_mask
 
+    def mlp(self, hidden_emb):
+        if self.args.inter_embed_size == 1:
+            scores = self.wo(hidden_emb)
+        else:
+            scores = self.wo2(torch.relu(self.wo1(hidden_emb)))
+        return scores
+
     def get_candi_cq_scores(self, batch_data):
         batch_size, candi_size, seq_length = batch_data.candi_cq_words.size()
         _, ref_doc_count, doc_length = batch_data.ref_doc_words.size()
@@ -134,10 +141,11 @@ class ClarifyQuestionRanker(nn.Module):
             scores = self.transformer_encoder(query_vecs, ref_doc_vecs, cq_words_masks, doc_token_masks)
         elif self.args.model_name == "plain_transformer":
             cls_vecs = query_vecs.view(batch_size, candi_size, seq_length, -1)[:,:,0,:]
-            if self.args.inter_embed_size == 1:
-                scores = self.wo(cls_vecs)
-            else:
-                scores = self.wo2(torch.relu(self.wo1(cls_vecs)))
+            scores = self.mlp(cls_vecs)
+            # if self.args.inter_embed_size == 1:
+            #     scores = self.wo(cls_vecs)
+            # else:
+            #     scores = self.wo2(torch.relu(self.wo1(cls_vecs)))
         elif self.args.model_name == "avg_transformer":
             first_vecs = query_vecs.view(batch_size, candi_size, seq_length, -1)[:,:,0,:]
             hist_cq_count = batch_data.cls_idxs.size(-1)
@@ -157,10 +165,11 @@ class ClarifyQuestionRanker(nn.Module):
                 else:
                     scores = self.double_wo2(torch.relu(self.double_wo1(final_hidden)))
             else:
-                if self.args.inter_embed_size == 1:
-                    scores = self.wo(first_vecs)
-                else:
-                    scores = self.wo2(torch.relu(self.wo1(first_vecs)))
+                scores = self.mlp(first_vecs)
+                # if self.args.inter_embed_size == 1:
+                #     scores = self.wo(first_vecs)
+                # else:
+                #     scores = self.wo2(torch.relu(self.wo1(first_vecs)))
 
         # batch_size * candi_size
         scores = scores.view(batch_size, candi_size)

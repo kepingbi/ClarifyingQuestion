@@ -52,6 +52,8 @@ def parse_args():
     parser.add_argument("--fix_scorer", type=str2bool, nargs='?',const=True,default=True,
             help="whether to fix the initial model for relevance matching.")
     parser.add_argument("--inter_embed_size", type=int, default=1, help="Size of each embedding after transformers.")
+    parser.add_argument("--sep_selector", type=str2bool, nargs='?',const=True,default=True,
+            help="whether to use separate model for the selector or share the parameters with retriever.")
     parser.add_argument("--projector_embed_size", type=int, default=32,\
         help="Size of each embedding after transformers for context_ranker.")
     parser.add_argument("--rerank", type=str2bool, nargs='?',const=True,default=True,
