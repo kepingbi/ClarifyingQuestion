@@ -29,8 +29,8 @@ class ContextRanker(nn.Module):
         self.pad_vid = 0 # pad_vid # should be 0
         
         self.logsoftmax = torch.nn.LogSoftmax(dim=-1)
-        self.projector = nn.Linear(self.embedding_size, 32, bias=True)
-        self.linear1 = nn.Linear(32*2, 4, bias=True)
+        self.projector = nn.Linear(self.embedding_size, self.args.projector_embed_size, bias=True)
+        self.linear1 = nn.Linear(self.args.projector_embed_size*2, 4, bias=True)
         # self.linear1 = nn.Linear(self.embedding_size*2, 4, bias=True)
         self.linear2 = nn.Linear(4, 1, bias=True)
         self.bias = torch.tensor(0., requires_grad=True).to(self.device)
