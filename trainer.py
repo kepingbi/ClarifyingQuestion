@@ -175,7 +175,10 @@ class Trainer(object):
         eval_pos = self.eval_pos
         for tfid in sorted_tf_cq_scores: # queries with no
             cur_pos_dic, other_pos_dic = pos_cq_dic.get(tfid, [[],[]])
-            # print(sorted_tf_cq_scores[tfid])
+            if len(sorted_tf_cq_scores[tfid]) == 0:
+                print(tfid)
+                continue
+                # print(sorted_tf_cq_scores[tfid])
             # print(tfid, cur_pos_dic, other_pos_dic)
             ranklist = [2 if x in cur_pos_dic \
                 else 1 if x in other_pos_dic else 0 for x, score in sorted_tf_cq_scores[tfid]]
@@ -236,10 +239,11 @@ class Trainer(object):
                 test_dataset = self.ExpDataset(
                     args, global_data, conv_data, \
                         hist_cq_dic=tf_top_cq_dic, expanded_candi_cq_dic=tf_candi_cq_dic)
-                if args.selector != "none" or args.model_name == "avg_transformer":
-                    # if it uses history to rank cqs.
-                    # print("skip the first round inference")
-                    continue
+                if k > 1:
+                    if args.selector != "none" or args.model_name == "avg_transformer":
+                        # if it uses history to rank cqs.
+                        # print("skip the first round inference")
+                        continue
             else:
                 test_dataset = self.ExpDataset(
                     args, global_data, conv_data, \
@@ -282,10 +286,17 @@ class Trainer(object):
         candi_sim_wrt_tq_dic = global_data.collect_candidate_sim_wrt_tq(
             tf_candi_cq_dic, global_data.cq_cq_rank_dic)
         for i in range(k):
+            if args.fix_conv_turns == 1 and i == 0:
+                tf_candi_cq_dic = dict()
+                # updated to the expanded version (all the possible other pos cq) as the first turn
+                self.ExpDataset.collect_init_cq_test_samples(
+                    conv_data, conv_data.candidate_cq_dic, tf_top_cq_dic, tf_candi_cq_dic)
+                continue
+
             sorted_tf_cq_scores = dict()
             # print(len(tf_candi_cq_dic))
             for tfid in tf_candi_cq_dic:
-                tid, fid = tfid.split('-')
+                tid = tfid.split('-')[0]
                 candi_scores = []
                 candi_cqs = []
                 hist_cq_set = set([cq for cq,score in tf_top_cq_dic.get(tfid, [])])
@@ -370,5 +381,7 @@ class Trainer(object):
         self.calc_metrics(sorted_tf_cq_scores, test_conv_data.pos_cq_dic, cutoff)
         # rankfname = "baseline.%s.%s.%s.%diter.len%d" % (rankfname, args.mmr_sim, args.aggr, k, cutoff)
         rankfname = "baseline.%s.%s.%s.%.2f.%diter.len%d" % (rankfname, args.mmr_sim, args.aggr, args.tweight, k, cutoff)
+        if args.fix_conv_turns > 0:
+            rankfname += ".expand%d" % args.fix_conv_turns
         output_path = os.path.join(args.save_dir, rankfname)
         self.write_ranklist(output_path, sorted_tf_cq_scores, cutoff)

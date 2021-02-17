@@ -36,10 +36,13 @@ class MultiTurnDataset(Dataset):
             self._data = self.collect_test_samples(
                 self.global_data, candidate_cq_dic, hist_cq_dic)
 
-    def collect_init_cq_test_samples(self, prod_data, candidate_cq_dic, hist_cq_dic, expanded_candi_cq_dic):
+    @staticmethod
+    def collect_init_cq_test_samples(prod_data, candidate_cq_dic, hist_cq_dic, expanded_candi_cq_dic):
         # enumerate all the possible clarifying questions (with label 1) for the first iteration.
         # historical q from outside information.
         for topic_facet_id in candidate_cq_dic:
+            if len(candidate_cq_dic[topic_facet_id]) == 0:
+                continue
             cur_pos_set, other_pos_set = prod_data.pos_cq_dic[topic_facet_id]
             updated_tfid = "%s-X" % topic_facet_id
             hist_cq_dic[updated_tfid] = []

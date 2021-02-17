@@ -63,7 +63,7 @@ def parse_args():
     parser.add_argument("--rankfname", default="test.best_model.ranklist")
     parser.add_argument("--dropout", default=0.1, type=float)
     parser.add_argument("--tweight", default=0.9, type=float)
-    parser.add_argument("--mmr_sim", default="log_sigmoid", type=str, choices=["log_sigmoid", "score", "sigmoid"])
+    parser.add_argument("--mmr_sim", default="log_sigmoid", type=str, choices=["log_sigmoid", "scores", "sigmoid"])
     parser.add_argument("--aggr", default="max", type=str, choices=["max", "mean"])
     parser.add_argument("--sigmoid_t", default=0.1, type=float)
     parser.add_argument("--sigmoid_cq", default=0.1, type=float)
