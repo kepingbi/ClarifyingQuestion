@@ -32,6 +32,8 @@ def parse_args():
     parser.add_argument("--init_model", default='')
     parser.add_argument("--init_rankfile", default='')
     parser.add_argument("--rerank_topk", type=int, default=50, help="rerank how many cqs to use during interactions")
+    parser.add_argument("--fix_conv_turns", type=int, default=0, \
+        help="how many turns are fixed during test time. (0 or 1:enumerate all the cq with label 1 as history")
     parser.add_argument("--model_name", default='plain_transformer',
             choices=['ref_transformer', 'plain_transformer', 'avg_transformer'],
             help="which type of model is used to train")
@@ -61,6 +63,8 @@ def parse_args():
     parser.add_argument("--rankfname", default="test.best_model.ranklist")
     parser.add_argument("--dropout", default=0.1, type=float)
     parser.add_argument("--tweight", default=0.9, type=float)
+    parser.add_argument("--mmr_sim", default="log_sigmoid", type=str, choices=["log_sigmoid", "score", "sigmoid"])
+    parser.add_argument("--aggr", default="max", type=str, choices=["max", "mean"])
     parser.add_argument("--sigmoid_t", default=0.1, type=float)
     parser.add_argument("--sigmoid_cq", default=0.1, type=float)
     parser.add_argument("--pos_cq_thre", default=0.8, type=float, help="")

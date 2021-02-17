@@ -12,7 +12,8 @@ with D at each step
 """
 
 class MultiTurnDataset(Dataset):
-    def __init__(self, args, global_data, prod_data, hist_cq_dic=None, candi_cq_dic=None):
+    def __init__(self, args, global_data, prod_data, \
+        hist_cq_dic=None, candi_cq_dic=None, expanded_candi_cq_dic=dict()):
         self.args = args
         self.sep_vid = global_data.sep_vid
         self.cls_vid = global_data.cls_vid
@@ -27,8 +28,31 @@ class MultiTurnDataset(Dataset):
         else:
             self.init_turn = hist_cq_dic is None or len(hist_cq_dic) == 0
             candidate_cq_dic = self.prod_data.candidate_cq_dic if candi_cq_dic is None else candi_cq_dic
+            if self.args.fix_conv_turns == 1 and len(hist_cq_dic) == 0:
+                # the first iteration 
+                self.collect_init_cq_test_samples(
+                    prod_data, candidate_cq_dic, hist_cq_dic, expanded_candi_cq_dic)
+                candidate_cq_dic = expanded_candi_cq_dic
             self._data = self.collect_test_samples(
                 self.global_data, candidate_cq_dic, hist_cq_dic)
+
+    def collect_init_cq_test_samples(self, prod_data, candidate_cq_dic, hist_cq_dic, expanded_candi_cq_dic):
+        # enumerate all the possible clarifying questions (with label 1) for the first iteration.
+        # historical q from outside information.
+        for topic_facet_id in candidate_cq_dic:
+            cur_pos_set, other_pos_set = prod_data.pos_cq_dic[topic_facet_id]
+            updated_tfid = "%s-X" % topic_facet_id
+            hist_cq_dic[updated_tfid] = []
+            expanded_candi_cq_dic[updated_tfid] = candidate_cq_dic[topic_facet_id]
+            prod_data.pos_cq_dic[updated_tfid] = (cur_pos_set, other_pos_set)
+            for cq in other_pos_set:
+                updated_tfid = "%s-%s" % (topic_facet_id, cq.split("-")[1])
+                prod_data.pos_cq_dic[updated_tfid] = (cur_pos_set, other_pos_set)
+                hist_cq_dic[updated_tfid] = [(cq, 0)]
+                candi_cq_list = [x for x in candidate_cq_dic[topic_facet_id] if x != cq]
+                expanded_candi_cq_dic[updated_tfid] = candi_cq_list
+
+        return expanded_candi_cq_dic, hist_cq_dic
 
     def collect_test_samples(self, global_data, candidate_cq_dic, hist_cq_dic):
         # query, historical questiones+answers, cq candidates
@@ -48,7 +72,7 @@ class MultiTurnDataset(Dataset):
             # candi_cq_list = list(candidate_cq_dic[topic_facet_id].difference(hist_cq_set))
             if len(candi_cq_list) == 0: #in case the candidate list is empty, query 115 doesn't matching any clarifying question. 
                 continue
-            topic, _ = topic_facet_id.split('-')
+            topic = topic_facet_id.split('-')[0]
             # doc_list = self.doc_diff(
             #     global_data.cq_doc_rank_dic, global_data.cq_top_doc_info_dic, \
             #         topic, hist_cqs)

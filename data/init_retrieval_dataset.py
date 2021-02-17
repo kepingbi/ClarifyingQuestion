@@ -10,50 +10,14 @@ from collections import defaultdict
 topic + (cq, ans) -> cq+, cq-
 with D at each step
 """
-class TextDataset(Dataset):
-    def __init__(self, args, qrel_file, cq_dic, mode="train"):
-        self.args = args
-        negk = self.args.neg_per_pos
-        self.qrel_dic = self.read_qrels(qrel_file)
-        self.all_cqs = list(cq_dic.keys())
-        # id, tokens
-        self._data = []
-        if mode == "train":
-            for topic_id in self.qrel_dic:
-                for pos_cq_id in self.qrel_dic[topic_id]:
-                    neg_cq_ids = random.sample(self.all_cqs, negk)
-                    self._data.append([topic_id, [pos_cq_id, neg_cq_ids]])
-        else:
-            candi_batch_size = args.candi_batch_size
-            seg_count = int((len(self.all_cqs) - 1) / candi_batch_size) + 1
-            for topic_id in self.qrel_dic:
-                for i in range(seg_count):
-                    self._data.append([topic_id,
-                                      self.all_cqs[i*candi_batch_size:(i+1)*candi_batch_size]])
-
-    def read_qrels(self, qrel_file):
-        # read positive document set corresponding to (query_id, facet_id)
-        # 1-2 Q0 1-11 1
-        qrel_dict = defaultdict(set)
-        with open(qrel_file, 'r') as fin:
-            for line in fin:
-                segs = line.strip("\r\n").split(' ')
-                qid, facet_id = map(int, segs[0].split('-'))
-                cq_id = segs[2]
-                label = int(segs[3])
-                if label > 0:
-                    qrel_dict[qid].add(cq_id)
-        return qrel_dict
-
-class InitRetrievalDataset(Dataset):
-    def __init__(self, args, global_data, prod_data, hist_cq_dic=None, candi_cq_dic=None):
+class InitDocRetrievalDataset(Dataset):
+    def __init__(self, args,  global_data, prod_data):
         self.args = args
         self.sep_vid = global_data.sep_vid
         self.cls_vid = global_data.cls_vid
         self.pad_vid = global_data.pad_vid
         self.global_data = global_data
         self.prod_data = prod_data
-        self.cq_topk = 10
         if prod_data.set_name == "train":
             self._data = self.collect_train_samples(self.global_data, self.prod_data)
             # self._data = self._data[:50] # for testing
@@ -65,6 +29,68 @@ class InitRetrievalDataset(Dataset):
             else:
                 self._data = self.collect_test_samples(
                     self.global_data, self.prod_data, hist_cq_dic)
+
+    def collect_train_samples(self, global_data, prod_data):
+        # query -> question+, question-
+        negk = self.args.neg_per_pos
+        qrel_dic = dict()
+        for topic_facet_id in prod_data.pos_cq_dic:
+            topic_id, _ = topic_facet_id.split("-")
+            if topic_id in qrel_dic:
+                continue
+            cur_pos_set, other_pos_set = prod_data.pos_cq_dic[topic_facet_id]
+            qrel_dic[topic_id] = cur_pos_set.union(other_pos_set)
+        all_cqs = self.global_data.clarify_q_dic.keys()
+        candidate_dic = dict()
+        for topic_facet_id in prod_data.candidate_cq_dic:
+            topic_id, _ = topic_facet_id.split("-")
+            if topic_id in candidate_dic:
+                continue
+            candi_cq_list = set(prod_data.candidate_cq_dic[topic_facet_id])
+            candidate_dic[topic_id] = candi_cq_list.difference(qrel_dic[topic_id])
+
+        train_data = []
+        for topic_id in qrel_dic:
+            for pos_cq_id in qrel_dic[topic_id]:
+                sample_count = min(negk, len(candidate_dic[topic_id]))
+                neg_cq_ids = random.sample(candidate_dic[topic_id], sample_count)
+                if len(candidate_dic[topic_id]) < negk:
+                    sample_count = negk - len(candidate_dic[topic_id])
+                    neg_cq_ids.extend(random.sample(all_cqs, sample_count))
+                neg_cq_ids = random.sample(all_cqs, negk)
+                ref_cq_list = [cq for cq, score in global_data.cq_cq_rank_dic["%s-X" % topic_id]]
+                ref_cq_list = ref_cq_list[:self.cq_topk]
+
+                # only calculate this for those with label 1
+                train_data.append(["%s-X" % topic_id, ref_cq_list, \
+                     [pos_cq_id] + neg_cq_ids, [1.] + [0.] * negk])
+        return train_data
+
+    def __len__(self):
+        return len(self._data)
+
+    def __getitem__(self, index):
+        return self._data[index]
+
+class InitRetrievalDataset(Dataset):
+    def __init__(self, args, global_data, prod_data):
+        self.args = args
+        self.sep_vid = global_data.sep_vid
+        self.cls_vid = global_data.cls_vid
+        self.pad_vid = global_data.pad_vid
+        self.global_data = global_data
+        self.prod_data = prod_data
+        self.cq_topk = 10
+        if prod_data.set_name == "train":
+            self._data = self.collect_train_samples(self.global_data, self.prod_data)
+            # self._data = self._data[:50] # for testing
+        else:
+            if self.args.init_cq:
+                self._data = self.collect_cq_test_samples(
+                    self.global_data, self.prod_data)
+            else:
+                self._data = self.collect_test_samples(
+                    self.global_data, self.prod_data)
     @staticmethod
     def read_galago_ranklist(rank_file):
         topic_ranklist_dic = defaultdict(list)
@@ -75,7 +101,7 @@ class InitRetrievalDataset(Dataset):
                 topic_ranklist_dic[segs[0]].append(doc_id)
         return topic_ranklist_dic
 
-    def collect_cq_test_samples(self, global_data, prod_data, hist_cq_dic):
+    def collect_cq_test_samples(self, global_data, prod_data):
         candidate_cq_dic = None
         if os.path.exists(self.args.init_rankfile):
             candidate_cq_dic = self.read_galago_ranklist(self.args.init_rankfile)
@@ -127,7 +153,7 @@ class InitRetrievalDataset(Dataset):
         return test_data
 
 
-    def collect_test_samples(self, global_data, prod_data, hist_cq_dic):
+    def collect_test_samples(self, global_data, prod_data):
         # query, cq candidates
         test_data = []
         candi_batch_size = self.args.candi_batch_size

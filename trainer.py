@@ -152,6 +152,8 @@ class Trainer(object):
             rankfname += ".ql"
         if args.rerank:
             rankfname += ".rerank"
+        if args.fix_conv_turns > 0:
+            rankfname += ".expand%d" % args.fix_conv_turns
         rankfname += ".top%d" % args.rerank_topk
         output_path = os.path.join(args.save_dir, rankfname)
         self.write_ranklist(output_path, sorted_tf_cq_scores, cutoff)
@@ -173,6 +175,8 @@ class Trainer(object):
         eval_pos = self.eval_pos
         for tfid in sorted_tf_cq_scores: # queries with no
             cur_pos_dic, other_pos_dic = pos_cq_dic.get(tfid, [[],[]])
+            # print(sorted_tf_cq_scores[tfid])
+            # print(tfid, cur_pos_dic, other_pos_dic)
             ranklist = [2 if x in cur_pos_dic \
                 else 1 if x in other_pos_dic else 0 for x, score in sorted_tf_cq_scores[tfid]]
             iranklist = [2] * len(cur_pos_dic) + [1] * len(other_pos_dic)
@@ -216,7 +220,6 @@ class Trainer(object):
         for tfid in all_tf_cq_scores:
             # print(all_tf_cq_scores[tfid])
             all_tf_cq_scores[tfid].sort(key=lambda x:x[1], reverse=True)
-        # print(len(all_tf_cq_scores))
         return all_tf_cq_scores
 
     def infer_k_iter(self, args, global_data, conv_data, description, k=3, cutoff=100):
@@ -227,13 +230,26 @@ class Trainer(object):
         tf_top_cq_dic = dict()
         tf_candi_cq_dic = conv_data.candidate_cq_dic.copy()
         for i in range(k):
-            test_dataset = self.ExpDataset(
-                args, global_data, conv_data, hist_cq_dic=tf_top_cq_dic, candi_cq_dic=tf_candi_cq_dic)
+            if args.fix_conv_turns == 1 and i == 0:
+                tf_candi_cq_dic = dict()
+                # updated to the expanded version (all the possible other pos cq) as the first turn
+                test_dataset = self.ExpDataset(
+                    args, global_data, conv_data, \
+                        hist_cq_dic=tf_top_cq_dic, expanded_candi_cq_dic=tf_candi_cq_dic)
+                if args.selector != "none" or args.model_name == "avg_transformer":
+                    # if it uses history to rank cqs.
+                    # print("skip the first round inference")
+                    continue
+            else:
+                test_dataset = self.ExpDataset(
+                    args, global_data, conv_data, \
+                        hist_cq_dic=tf_top_cq_dic, candi_cq_dic=tf_candi_cq_dic)
             dataloader = self.ExpDataloader(
                     args, test_dataset, batch_size=args.valid_batch_size, #batch_size
                     shuffle=False, num_workers=args.num_workers)
             sorted_tf_cq_scores = self.get_entry_scores(args, dataloader, description)
             # print(len(sorted_tf_cq_scores), len(tf_candi_cq_dic))
+            # print(sorted_tf_cq_scores.keys())
             for tfid in sorted_tf_cq_scores:
                 cur_pos_dic, _ = conv_data.pos_cq_dic.get(tfid, [[],[]])
                 if sorted_tf_cq_scores[tfid][0][0] in cur_pos_dic:
@@ -242,6 +258,7 @@ class Trainer(object):
                 if tfid not in tf_top_cq_dic:
                     tf_top_cq_dic[tfid] = []
                 end = cutoff - len(tf_top_cq_dic[tfid]) if i == k-1 else 1
+                # print(tfid, sorted_tf_cq_scores[tfid])
                 tf_top_cq_dic[tfid].extend(sorted_tf_cq_scores[tfid][:end])
         for tfid in tf_top_cq_dic:
             cur_pos_dic, _ = conv_data.pos_cq_dic.get(tfid, [[],[]])
@@ -266,7 +283,7 @@ class Trainer(object):
             tf_candi_cq_dic, global_data.cq_cq_rank_dic)
         for i in range(k):
             sorted_tf_cq_scores = dict()
-            print(len(tf_candi_cq_dic))
+            # print(len(tf_candi_cq_dic))
             for tfid in tf_candi_cq_dic:
                 tid, fid = tfid.split('-')
                 candi_scores = []
@@ -294,20 +311,27 @@ class Trainer(object):
                             scores.append(sim_wrt_hist)
                     candi_scores.append(scores)
                 candi_scores = torch.tensor(candi_scores).to(args.device)
-                # t_sim = torch.log(sigmoid(candi_scores[:,0] * args.sigmoid_t))
-                # t_sim = sigmoid(candi_scores[:, 0] * args.sigmoid_t)
-                t_sim = candi_scores[:, 0]
-                # hist_sim = torch.log(1 - sigmoid(candi_scores[:, 1:] * args.sigmoid_cq))
-                # hist_sim = sigmoid(candi_scores[:, 1:] * args.sigmoid_cq)
-                hist_sim = candi_scores[:, 1:]
+                if args.mmr_sim == "scores":
+                    t_sim = candi_scores[:, 0]
+                    hist_sim = candi_scores[:, 1:]
+                elif args.mmr_sim == "sigmoid":
+                    t_sim = sigmoid(candi_scores[:, 0] * args.sigmoid_t)
+                    hist_sim = sigmoid(candi_scores[:, 1:] * args.sigmoid_cq)
+                elif args.mmr_sim == "log_sigmoid":
+                    t_sim = torch.log(sigmoid(candi_scores[:,0] * args.sigmoid_t))
+                    hist_sim = torch.log(1 - sigmoid(candi_scores[:, 1:] * args.sigmoid_cq))
                 # print(tfid, t_sim)
                 # print(tfid, tf_top_cq_dic.get(tfid, None), hist_sim)
                 if hist_sim.size(-1) > 0:
-                    # sim = t_sim * args.tweight + hist_sim.mean(dim=-1) * (1 - args.tweight)
-                    max_sim, _ = hist_sim.max(dim=-1)
-                    # max_sim, _ = hist_sim.min(dim=-1)
-                    # sim = t_sim * args.tweight + max_sim * (1 - args.tweight)
-                    sim = t_sim * args.tweight - max_sim * (1 - args.tweight)
+                    if args.aggr == "mean":
+                        sim = t_sim * args.tweight + hist_sim.mean(dim=-1) * (1 - args.tweight)
+                    elif args.aggr == "max":
+                        if args.mmr_sim == "log_sigmoid":
+                            max_sim, _ = hist_sim.min(dim=-1)
+                            sim = t_sim * args.tweight + max_sim * (1 - args.tweight)
+                        else:
+                            max_sim, _ = hist_sim.max(dim=-1)
+                            sim = t_sim * args.tweight - max_sim * (1 - args.tweight)
                 else:
                     sim = t_sim
                 sorted_scores = list(zip(candi_cqs, sim.cpu().tolist()))
@@ -344,6 +368,7 @@ class Trainer(object):
         self.calc_metrics(sorted_tf_cq_scores, test_conv_data.pos_cq_dic, cutoff)
         self.eval_pos = 2
         self.calc_metrics(sorted_tf_cq_scores, test_conv_data.pos_cq_dic, cutoff)
-        rankfname = "baseline.%s.%diter.len%d" % (rankfname, k, cutoff)
+        # rankfname = "baseline.%s.%s.%s.%diter.len%d" % (rankfname, args.mmr_sim, args.aggr, k, cutoff)
+        rankfname = "baseline.%s.%s.%s.%.2f.%diter.len%d" % (rankfname, args.mmr_sim, args.aggr, args.tweight, k, cutoff)
         output_path = os.path.join(args.save_dir, rankfname)
         self.write_ranklist(output_path, sorted_tf_cq_scores, cutoff)

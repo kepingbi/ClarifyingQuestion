@@ -113,7 +113,8 @@ class GlobalConvSearchData():
         topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "cq_top_doc_rerank50.ranklist")
         # topic_cq_cq_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_q.ranklist")
         if args.rerank:
-            topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.ql.rerank")
+            # topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.ql.rerank")
+            topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.ql.rerank.cur")
         else:
             topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.rerank")
         # if os.path.exists(args.init_rankfile):
@@ -125,8 +126,8 @@ class GlobalConvSearchData():
         # self.clarify_q_dic = self.read_id_content_json(question_path)
         # self.doc_dic = self.read_id_content_json(candi_doc_path)
         self.clarify_q_dic = torch.load(question_path)
-        # self.doc_dic = torch.load(candi_doc_path) # the first 500 words in the doc
-        self.doc_psg_dic = torch.load(candi_doc_psg_path) # the first psg and other top ranked doc
+        self.doc_dic = torch.load(candi_doc_path) # the first 500 words in the doc
+        # self.doc_psg_dic = torch.load(candi_doc_psg_path) # the first psg and other top ranked doc
         self.topic_dic, self.answer_dic = self.read_qulac_answer(qulac_path)
         self.cq_doc_rank_dic = self.read_topic_cq_ranklist(topic_cq_doc_rankfile)
         logger.info("Loading %s" % topic_cq_cq_rankfile)

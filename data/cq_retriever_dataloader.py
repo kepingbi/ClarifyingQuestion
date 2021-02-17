@@ -31,6 +31,7 @@ class ClarifyQuestionDataloader(DataLoader):
         #[topic_facet_id, hist_cqs, doc_list, [pos_cq, other_cq, neg_cq]]
         topic_facet_ids = [entry[0] for entry in batch]
         topic_ids = [x.split("-")[0] for x in topic_facet_ids]
+        true_topic_facet_ids = ["%s-%s" % (x.split("-")[0], x.split("-")[1]) for x in topic_facet_ids]
         topic_queries = [self.global_data.topic_dic[x] for x in topic_ids]
         hist_cq_ids = [entry[1] for entry in batch] # batch_size, hist_cq_count
         candi_cq_ids = [entry[3] for entry in batch]
@@ -45,9 +46,9 @@ class ClarifyQuestionDataloader(DataLoader):
             word_seq = [self.cls_vid] + topic_queries[i]
             for cq in entry[1]: #hist_cqs
                 word_seq.extend([self.sep_vid, self.cls_vid] + self.global_data.clarify_q_dic[cq])
-                if cq in self.global_data.answer_dic[topic_facet_ids[i]]:
+                if cq in self.global_data.answer_dic[true_topic_facet_ids[i]]:
                     # if this q is for other topic, it will not have corresponding answer. 
-                    word_seq.extend([self.sep_vid] + self.global_data.answer_dic[topic_facet_ids[i]][cq])
+                    word_seq.extend([self.sep_vid] + self.global_data.answer_dic[true_topic_facet_ids[i]][cq])
 
             batch_cls.append([idx for idx in range(1, len(word_seq)) if word_seq[idx] == self.cls_vid])
             seg_id = [0] * len(word_seq)
@@ -68,7 +69,7 @@ class ClarifyQuestionDataloader(DataLoader):
                 ref_doc_words.append([[self.cls_vid] + self.global_data.clarify_q_dic[cq] for cq in entry[2]])
             else:
                 # print(entry[0])
-                topic, _ = entry[0].split('-')
+                topic = entry[0].split('-')[0]
                 cq_list = self.global_data.cq_cq_rank_dic["%s-X" % topic]
                 # print(cq_list[:10])
                 ref_doc_words.append([[self.pad_vid]])

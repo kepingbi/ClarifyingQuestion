@@ -338,7 +338,8 @@ if __name__ == '__main__':
     parser.add_argument('--index_path', default="/net/home/kbi/ingham_disk/conv_search/qulac/data/galago_index/clueweb_doc_index", type=str)
     parser.add_argument('--cq_path', default="/net/home/kbi/projects/conv_search/qulac/data/qulac/new_qulac.json", type=str)
     parser.add_argument('--doc_dir', default="/net/home/kbi/ingham_disk/conv_search/qulac/data/clean_topic_docs", type=str)
-    
+    parser.add_argument('--topk', default=100, type=int) # or 50
+
     args = parser.parse_args()
     request_json_path = os.path.join(args.data_path, "request_json")
     index_path = os.path.join(args.data_path, "clueweb_doc_index")
@@ -352,9 +353,11 @@ if __name__ == '__main__':
     # Call the QL function with /net/home/kbi/projects/conv_search/qulac/src/doc_initial_retrieval.py
 
     # 2. build index for passages in top ranked documents
-    rank_file = os.path.join(args.data_path, "clarify_q_init_doc.mu1500.ranklist")
+    # rank_file = os.path.join(args.data_path, "clarify_q_init_doc.mu1500.ranklist")
+    rank_file = os.path.join(args.data_path, "cq_top_doc_rerank100.ranklist")
+    
     # output_top_doc_psg_as_trec(rank_file, args.doc_dir, args.data_path)
-    # output_doc_as_trec(rank_file, args.doc_dir, args.data_path)
+    output_doc_as_trec(rank_file, args.doc_dir, args.data_path)
     ## galago build --indexPath=clueweb_top_doc_index --inputPath+clueweb_doc.trectext.gz
     ## galago build --indexPath=clueweb_top_doc_psg_index --inputPath+clueweb_top_doc_psg.trectext.gz
     # 3. retrieve passages from the index
@@ -364,11 +367,11 @@ if __name__ == '__main__':
     # 4. get the top 3/4 passages corresponding to each top retrieved document. 
     psg_ranklist = os.path.join(args.data_path, "top_doc_passage.ranklist")
     psg_trec_file = os.path.join(args.data_path, "clueweb_top_doc_psg.trectext.gz")
-    get_top_psg_for_top_doc(psg_ranklist, psg_trec_file, rank_file)
-    sys.exit(0)
+    # get_top_psg_for_top_doc(psg_ranklist, psg_trec_file, rank_file)
+    # sys.exit(0)
 
     whole_ranklist = os.path.join(args.data_path, "cq_top_doc.ranklist")
-    out_filtered_ranklist = os.path.join(args.data_path, "cq_top_doc_rerank50.ranklist")
-    rerank_init_top(whole_ranklist, out_filtered_ranklist)
+    out_filtered_ranklist = os.path.join(args.data_path, "cq_top_doc_rerank%d.ranklist" % args.topk)
+    # rerank_init_top(whole_ranklist, out_filtered_ranklist, topk=args.topk)
 
 
