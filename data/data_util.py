@@ -113,8 +113,8 @@ class GlobalConvSearchData():
         topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "cq_top_doc_rerank50.ranklist")
         # topic_cq_cq_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_q.ranklist")
         if args.rerank:
-            # topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.ql.rerank")
-            topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.ql.rerank.cur")
+            topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.ql.rerank")
+            # topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.ql.rerank.cur")
         else:
             topic_cq_cq_rankfile = os.path.join(data_path, "bert.cq.rerank")
         # if os.path.exists(args.init_rankfile):

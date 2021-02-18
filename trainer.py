@@ -166,8 +166,11 @@ class Trainer(object):
                 # cq_id_ranklist = cq_id_ranklist[:cutoff]
                 for rank in range(len(sorted_tf_cq_scores[tfid])):
                     cq_id, score = sorted_tf_cq_scores[tfid][rank]
+                    output_tfid = tfid
+                    if len(tfid.split('-')) == 2 and self.args.fix_conv_turns == 1:
+                        output_tfid = "%s-X" % tfid
                     line = "%s Q0 %s %d %f %s\n" \
-                            % (tfid, cq_id, rank+1, score, model_name)
+                            % (output_tfid, cq_id, rank+1, score, model_name)
                     rank_fout.write(line)
 
     def calc_metrics(self, sorted_tf_cq_scores, pos_cq_dic, cutoff=100, etype='Valid'):
@@ -233,25 +236,31 @@ class Trainer(object):
         tf_top_cq_dic = dict()
         tf_candi_cq_dic = conv_data.candidate_cq_dic.copy()
         for i in range(k):
-            if args.fix_conv_turns == 1 and i == 0:
-                tf_candi_cq_dic = dict()
-                # updated to the expanded version (all the possible other pos cq) as the first turn
-                test_dataset = self.ExpDataset(
-                    args, global_data, conv_data, \
-                        hist_cq_dic=tf_top_cq_dic, expanded_candi_cq_dic=tf_candi_cq_dic)
-                if k > 1:
-                    if args.selector != "none" or args.model_name == "avg_transformer":
-                        # if it uses history to rank cqs.
-                        # print("skip the first round inference")
-                        continue
-            else:
-                test_dataset = self.ExpDataset(
-                    args, global_data, conv_data, \
-                        hist_cq_dic=tf_top_cq_dic, candi_cq_dic=tf_candi_cq_dic)
+            # construct samples for tfids without histories in i=0 iteration \
+            # and all the tfids with history length=i in the following iterations
+            test_dataset = self.ExpDataset(
+                args, global_data, conv_data, \
+                    hist_cq_dic=tf_top_cq_dic, candi_cq_dic=tf_candi_cq_dic)
+            # print(len(test_dataset))
             dataloader = self.ExpDataloader(
                     args, test_dataset, batch_size=args.valid_batch_size, #batch_size
                     shuffle=False, num_workers=args.num_workers)
             sorted_tf_cq_scores = self.get_entry_scores(args, dataloader, description)
+            
+            if args.fix_conv_turns == 1 and i == 0:
+                # updated to the expanded version (all the possible other pos cq) as the first turn
+                self.ExpDataset.collect_init_cq_test_samples(
+                    conv_data, conv_data.candidate_cq_dic, tf_top_cq_dic, tf_candi_cq_dic)
+
+                # test_dataset = self.ExpDataset(
+                #     args, global_data, conv_data, \
+                #         hist_cq_dic=tf_top_cq_dic, expanded_candi_cq_dic=tf_candi_cq_dic, do_expansion=True)
+                # print(len(test_dataset))
+                # if k > 1:
+                #     if args.selector != "none" or args.model_name == "avg_transformer":
+                #         # if it uses history to rank cqs.
+                #         # print("skip the first round inference")
+                #         continue
             # print(len(sorted_tf_cq_scores), len(tf_candi_cq_dic))
             # print(sorted_tf_cq_scores.keys())
             for tfid in sorted_tf_cq_scores:

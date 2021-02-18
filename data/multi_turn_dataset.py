@@ -28,11 +28,12 @@ class MultiTurnDataset(Dataset):
         else:
             self.init_turn = hist_cq_dic is None or len(hist_cq_dic) == 0
             candidate_cq_dic = self.prod_data.candidate_cq_dic if candi_cq_dic is None else candi_cq_dic
-            if self.args.fix_conv_turns == 1 and len(hist_cq_dic) == 0:
-                # the first iteration 
-                self.collect_init_cq_test_samples(
-                    prod_data, candidate_cq_dic, hist_cq_dic, expanded_candi_cq_dic)
-                candidate_cq_dic = expanded_candi_cq_dic
+            # if do_expansion:
+            # # if self.args.fix_conv_turns == 1 and len(hist_cq_dic) == 0:
+            #     # the first iteration 
+            #     self.collect_init_cq_test_samples(
+            #         prod_data, candidate_cq_dic, hist_cq_dic, expanded_candi_cq_dic)
+            #     candidate_cq_dic = expanded_candi_cq_dic
             self._data = self.collect_test_samples(
                 self.global_data, candidate_cq_dic, hist_cq_dic)
 
@@ -44,10 +45,10 @@ class MultiTurnDataset(Dataset):
             if len(candidate_cq_dic[topic_facet_id]) == 0:
                 continue
             cur_pos_set, other_pos_set = prod_data.pos_cq_dic[topic_facet_id]
-            updated_tfid = "%s-X" % topic_facet_id
-            hist_cq_dic[updated_tfid] = []
-            expanded_candi_cq_dic[updated_tfid] = candidate_cq_dic[topic_facet_id]
-            prod_data.pos_cq_dic[updated_tfid] = (cur_pos_set, other_pos_set)
+            # updated_tfid = "%s-X" % topic_facet_id
+            # hist_cq_dic[updated_tfid] = []
+            # expanded_candi_cq_dic[updated_tfid] = candidate_cq_dic[topic_facet_id]
+            # prod_data.pos_cq_dic[updated_tfid] = (cur_pos_set, other_pos_set)
             for cq in other_pos_set:
                 updated_tfid = "%s-%s" % (topic_facet_id, cq.split("-")[1])
                 prod_data.pos_cq_dic[updated_tfid] = (cur_pos_set, other_pos_set)
