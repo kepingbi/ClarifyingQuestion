@@ -67,15 +67,17 @@ class ClarifyQuestionDataloader(DataLoader):
             # doc_topk, word_count
             ref_doc_words.append(cur_ref_doc_words)
             '''
-            # ref_doc_words.append([[self.cls_vid] + self.global_data.doc_dic[doc] for doc in entry[2]])
-            if len(entry[2]) > 0:
-                ref_doc_words.append([[self.cls_vid] + self.global_data.clarify_q_dic[cq] for cq in entry[2]])
-            else:
-                # print(entry[0])
-                topic = entry[0].split('-')[0]
-                cq_list = self.global_data.cq_cq_rank_dic["%s-X" % topic]
-                # print(cq_list[:10])
-                ref_doc_words.append([[self.pad_vid]])
+            if self.args.info == "doc":
+                ref_doc_words.append([[self.cls_vid] + self.global_data.doc_dic[doc] for doc in entry[2]])
+            elif self.args.info == "cq":
+                if len(entry[2]) > 0:
+                    ref_doc_words.append([[self.cls_vid] + self.global_data.clarify_q_dic[cq] for cq in entry[2]])
+                else:
+                    # print(entry[0])
+                    topic = entry[0].split('-')[0]
+                    cq_list = self.global_data.cq_cq_rank_dic["%s-X" % topic]
+                    print(cq_list[:10])
+                    ref_doc_words.append([[self.pad_vid]])
             per_candi_cq, per_candi_seg = [], []
             for cq in entry[3]: # candidate cq
                 cq_words = [self.sep_vid] + self.global_data.clarify_q_dic[cq]

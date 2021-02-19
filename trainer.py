@@ -296,7 +296,7 @@ class Trainer(object):
             tf_candi_cq_dic, global_data.cq_cq_rank_dic)
         for i in range(k):
             if args.fix_conv_turns == 1 and i == 0:
-                tf_candi_cq_dic = dict()
+                # tf_candi_cq_dic = dict()
                 # updated to the expanded version (all the possible other pos cq) as the first turn
                 self.ExpDataset.collect_init_cq_test_samples(
                     conv_data, conv_data.candidate_cq_dic, tf_top_cq_dic, tf_candi_cq_dic)
