@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument("--fix_conv_turns", type=int, default=0, \
         help="how many turns are fixed during test time. (0 or 1:enumerate all the cq with label 1 as history")
     parser.add_argument("--model_name", default='plain_transformer',
-            choices=['ref_transformer', 'plain_transformer', 'avg_transformer'],
+            choices=['ref_transformer', 'plain_transformer', 'avg_transformer', 'QPP'],
             help="which type of model is used to train")
     parser.add_argument("--selector", default='none',
             choices=['ref', "wref", 'plain', "none"], help="which type of model is used as selector")
@@ -61,6 +61,8 @@ def parse_args():
     parser.add_argument("--rerank", type=str2bool, nargs='?',const=True,default=True,
             help="whether to rerank results from initial retrieval.")
     parser.add_argument("--rankfname", default="test.best_model.ranklist")
+    parser.add_argument("--ql_alpha", default=0.5, type=float)
+    parser.add_argument("--ql_doc_topk", default=100, type=int)
     parser.add_argument("--dropout", default=0.1, type=float)
     parser.add_argument("--tweight", default=0.9, type=float)
     parser.add_argument("--mmr_sim", default="log_sigmoid", type=str, choices=["log_sigmoid", "scores", "sigmoid"])

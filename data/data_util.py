@@ -4,6 +4,9 @@ import numpy as np
 from others.logging import logger, init_logger
 from collections import defaultdict
 import others.util as util
+from ql_scores.utils.utils import tokenize_and_stem #, tokenize_only
+from ql_scores.QL import QL
+
 from pytorch_pretrained_bert import BertTokenizer
 import gzip
 import os
@@ -98,6 +101,11 @@ class GlobalConvSearchData():
             self.tokenizer = BertTokenizer.from_pretrained(args.pretrained_bert_path)
         else:
             self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+        self.ql = None
+        if args.model_name == "QPP":
+            self.ql = QL(do_stemming=True,
+                    do_stopword_removal=True,
+                    data_root='%s/../'% data_path) # parent directory
 
         self.sep_vid = self.tokenizer.vocab['[SEP]']
         self.cls_vid = self.tokenizer.vocab['[CLS]']
@@ -107,6 +115,8 @@ class GlobalConvSearchData():
         # candi_doc_path = os.path.join(data_path, "candi_doc_dict.json.gz")
         question_path = os.path.join(data_path, "questions_dict.pt")
         candi_doc_path = os.path.join(data_path, "candi_doc_dict.pt")
+        stemmed_cq_path = os.path.join(data_path, "stemmed_questions_dict.pt")
+        self.stemmed_cq_dic = torch.load(stemmed_cq_path)
         candi_doc_psg_path = os.path.join(data_path, "candi_doc_psg_dict.pt")
         qulac_path = os.path.join(data_path, "new_qulac.json")
         # topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_doc.mu1500.ranklist")
@@ -128,7 +138,8 @@ class GlobalConvSearchData():
         self.clarify_q_dic = torch.load(question_path)
         self.doc_dic = torch.load(candi_doc_path) # the first 500 words in the doc
         # self.doc_psg_dic = torch.load(candi_doc_psg_path) # the first psg and other top ranked doc
-        self.topic_dic, self.answer_dic = self.read_qulac_answer(qulac_path)
+        self.topic_dic, self.answer_dic, \
+            self.stemmed_topic_dic, self.stemmed_answer_dic = self.read_qulac_answer(qulac_path)
         self.cq_doc_rank_dic = self.read_topic_cq_ranklist(topic_cq_doc_rankfile)
         logger.info("Loading %s" % topic_cq_cq_rankfile)
         self.cq_cq_rank_dic = self.read_topic_cq_ranklist(topic_cq_cq_rankfile)
@@ -181,6 +192,7 @@ class GlobalConvSearchData():
     def read_qulac_answer(self, qulac_file):
         topic_dic = dict() # query
         answer_dic = dict()
+        stemmed_topic_dic, stemmed_anwer_dic = dict(), dict()
         with open(qulac_file) as fin:
             fjson = json.load(fin)
             entry_ids = fjson["topic_id"].keys()
@@ -194,14 +206,18 @@ class GlobalConvSearchData():
                 if topic_id not in topic_dic:
                     tokens = self.tokenizer.tokenize(topics[e_id])
                     topic_dic[topic_id] = self.tokenizer.convert_tokens_to_ids(tokens)
+                    stemmed_topic_dic[topic_id] = tokenize_and_stem(topics[e_id])
 
                 topic_facet_id = "%s-%s" % (topic_id, facet_id)
                 global_qid = "%s-%s" % (topic_id, qid)
                 if topic_facet_id not in answer_dic:
                     answer_dic[topic_facet_id] = dict()
+                    stemmed_anwer_dic[topic_facet_id] = dict()
                 tokens = self.tokenizer.tokenize(answers[e_id])
                 answer_dic[topic_facet_id][global_qid] = self.tokenizer.convert_tokens_to_ids(tokens)
-        return topic_dic, answer_dic
+                # stemmed_anwer_dic[topic_facet_id][global_qid] = tokenize_and_stem(answers[e_id])
+                # TODO: stemmed_answer_dic may not be needed for QL
+        return topic_dic, answer_dic, stemmed_topic_dic, stemmed_anwer_dic
 
     def read_topic_cq_ranklist(self, rank_file, read_score=True):
         topic_ranklist_dic = defaultdict(list)

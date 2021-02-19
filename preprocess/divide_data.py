@@ -131,7 +131,7 @@ def output_bert_format(text_json_file, save_file):
             content_tokens = tokenizer.tokenize(content_dict[rid])
             content_tokens = content_tokens[:500] # cutoff documents longer than 500
             # also consider using concatenated top ranked passages instead
-            content_dict[rid] = tokenizer.convert_tokens_to_ids(content_tokens)            
+            content_dict[rid] = tokenizer.convert_tokens_to_ids(content_tokens)
             count += 1
             if count % 500 == 0:
                 print("%d ids has been parsed!" % count)
