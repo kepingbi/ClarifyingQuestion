@@ -1,11 +1,12 @@
 import torch
 
 class ClarifyQuestionBatch(object):
-    def __init__(self, topic_facet_ids, candi_cq_ids, hist_cq_ids, candi_labels, \
-        candi_cq_words, candi_seg_ids, ref_doc_words=[], \
-            candi_hist_words=[], candi_hist_segs=[], \
-                init_candi_scores=[], word_weights=[], \
-                    cls_idxs=[], to_tensor=True): #"cpu" or "cuda"
+    def __init__(self, topic_facet_ids, candi_cq_ids, hist_cq_ids, candi_labels,
+                candi_cq_words, candi_seg_ids, ref_doc_words=[],
+                candi_hist_words=[], candi_hist_segs=[], 
+                init_candi_scores=[], word_weights=[],
+                cls_idxs=[], candi_cls_idxs=[],
+                candi_retrieval_scores=[], candi_scores_std=[], to_tensor=True): #"cpu" or "cuda"
         self.topic_facet_ids = topic_facet_ids
         self.candi_cq_ids = candi_cq_ids
         self.candi_cq_words = candi_cq_words
@@ -18,6 +19,9 @@ class ClarifyQuestionBatch(object):
         self.init_candi_scores = init_candi_scores
         self.word_weights = word_weights
         self.cls_idxs = cls_idxs
+        self.candi_cls_idxs = candi_cls_idxs
+        self.candi_retrieval_scores = candi_retrieval_scores
+        self.candi_scores_std = candi_scores_std
 
         if to_tensor:
             self.to_tensor()
@@ -32,6 +36,9 @@ class ClarifyQuestionBatch(object):
         self.init_candi_scores = torch.tensor(self.init_candi_scores)
         self.word_weights = torch.tensor(self.word_weights)
         self.cls_idxs = torch.tensor(self.cls_idxs)
+        self.candi_cls_idxs = torch.tensor(self.candi_cls_idxs)
+        self.candi_retrieval_scores = torch.tensor(self.candi_retrieval_scores)
+        self.candi_scores_std = torch.tensor(self.candi_scores_std)
 
     def to(self, device):
         if device == "cpu":
@@ -46,7 +53,11 @@ class ClarifyQuestionBatch(object):
             init_candi_scores = self.init_candi_scores.to(device)
             word_weights = self.word_weights.to(device)
             cls_idxs = self.cls_idxs.to(device)
+            candi_cls_idxs = self.candi_cls_idxs.to(device)
+            candi_retrieval_scores = self.candi_retrieval_scores.to(device)
+            candi_scores_std = self.candi_scores_std.to(device)
 
-            return self.__class__(self.topic_facet_ids, self.candi_cq_ids, self.hist_cq_ids, candi_labels, \
-                candi_cq_words, candi_seg_ids, ref_doc_words, candi_hist_words, candi_hist_segs, \
-                    init_candi_scores, word_weights, cls_idxs, to_tensor=False)
+            return self.__class__(self.topic_facet_ids, self.candi_cq_ids, self.hist_cq_ids, candi_labels,
+                                candi_cq_words, candi_seg_ids, ref_doc_words, candi_hist_words, candi_hist_segs,
+                                init_candi_scores, word_weights, cls_idxs, candi_cls_idxs, 
+                                candi_retrieval_scores, candi_scores_std, to_tensor=False)

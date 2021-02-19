@@ -82,10 +82,16 @@ class ClarifyQuestionRanker(nn.Module):
                 self.wo1 = nn.Linear(self.embedding_size, self.args.inter_embed_size, bias=True)
                 self.wo2 = nn.Linear(self.args.inter_embed_size, 1, bias=True)
             if self.args.model_name == "avg_transformer":
-                    self.double_wo = nn.Linear(2 * self.embedding_size, 1, bias=True)
-                    if self.args.inter_embed_size > 1:
-                        self.double_wo1 = nn.Linear(2 * self.embedding_size, self.args.inter_embed_size, bias=True)
-                        self.double_wo2 = nn.Linear(self.args.inter_embed_size, 1, bias=True)
+                self.double_wo = nn.Linear(2 * self.embedding_size, 1, bias=True)
+                if self.args.inter_embed_size > 1:
+                    self.double_wo1 = nn.Linear(2 * self.embedding_size, self.args.inter_embed_size, bias=True)
+                    self.double_wo2 = nn.Linear(self.args.inter_embed_size, 1, bias=True)
+            elif self.args.model_name == "QPP":
+                concat_dim = 3 * self.embedding_size + 2 * self.args.ql_doc_topk
+                self.qpp_wo = nn.Linear(concat_dim, 1, bias=True)
+                if self.args.inter_embed_size > 1:
+                    self.qpp_wo1 = nn.Linear(concat_dim, self.args.inter_embed_size, bias=True)
+                    self.qpp_wo2 = nn.Linear(self.args.inter_embed_size, 1, bias=True)
 
         self.logsoftmax = torch.nn.LogSoftmax(dim=-1)
 
@@ -115,20 +121,20 @@ class ClarifyQuestionRanker(nn.Module):
 
     def get_candi_cq_scores(self, batch_data):
         batch_size, candi_size, seq_length = batch_data.candi_cq_words.size()
-        _, ref_doc_count, doc_length = batch_data.ref_doc_words.size()
-        # print(ref_doc_count)
         # batch_size, candi_size, seq_length
-        # batch_size, ref_doc_count, doc_length
 
         candi_cq_words = batch_data.candi_cq_words.view(-1, seq_length)
         candi_seg_ids = batch_data.candi_seg_ids.view(-1, seq_length)
-        ref_doc_words = batch_data.ref_doc_words.view(-1, doc_length)
-        doc_token_masks = ref_doc_words.ne(self.pad_vid)
         cq_words_masks = candi_cq_words.ne(self.pad_vid)
 
         query_vecs = self.bert(candi_cq_words, candi_seg_ids, cq_words_masks)
         # query_vecs is batch_size * candi_size, cq_words_len, embedding_size
         if self.args.model_name == "ref_transformer":
+            _, ref_doc_count, doc_length = batch_data.ref_doc_words.size()
+            # batch_size, ref_doc_count, doc_length
+            ref_doc_words = batch_data.ref_doc_words.view(-1, doc_length)
+            doc_token_masks = ref_doc_words.ne(self.pad_vid)
+    
             ref_doc_vecs = self.bert(ref_doc_words, mask=doc_token_masks)
             # batch_size * ref_doc_count, doc_len, embedding_size
             ref_doc_vecs = ref_doc_vecs.view(batch_size, ref_doc_count, doc_length, -1)
@@ -166,10 +172,38 @@ class ClarifyQuestionRanker(nn.Module):
                     scores = self.double_wo2(torch.relu(self.double_wo1(final_hidden)))
             else:
                 scores = self.mlp(first_vecs)
-                # if self.args.inter_embed_size == 1:
-                #     scores = self.wo(first_vecs)
-                # else:
-                #     scores = self.wo2(torch.relu(self.wo1(first_vecs)))
+        elif self.args.model_name == "QPP":
+            topic_vecs = query_vecs.view(batch_size, candi_size, seq_length, -1)[:,:,0,:]
+            hist_cq_count = batch_data.cls_idxs.size(-1)
+            if hist_cq_count > 0:
+                cls_idxs = batch_data.cls_idxs.unsqueeze(1).expand(-1, candi_size, -1)
+                cls_idxs = cls_idxs.contiguous().view(-1, hist_cq_count)
+                hist_cq_vecs = query_vecs[torch.arange(batch_size*candi_size).unsqueeze(1), cls_idxs]
+                # batch_size * candi_size, hist_cq_count, embedding_size
+                cls_masks = cls_idxs.ne(0).unsqueeze(-1).float()
+                hist_cq_vecs = hist_cq_vecs * cls_masks
+                batch_hist_count = cls_masks.sum(dim=1)
+                sum_cq_vecs = torch.sum(hist_cq_vecs * cls_masks, dim=1)
+                avg_hist_cq_vecs = torch.where(batch_hist_count.ne(0), sum_cq_vecs / batch_hist_count, sum_cq_vecs)
+                # in case hist_cq_count is 0, vecs will be nan
+                # avg_hist_cq_vecs = torch.sum(hist_cq_vecs * cls_masks, dim=1) / cls_masks.sum(dim=1)
+                # batch_size * candi_size, embedding_size
+                avg_hist_cq_vecs = avg_hist_cq_vecs.view(batch_size, candi_size, -1)
+
+                candi_cls_idxs = batch_data.candi_cls_idxs.unsqueeze(1).expand(-1, candi_size)
+                candi_cls_idxs = candi_cls_idxs.contiguous().view(-1, 1)
+                candi_cq_vecs = query_vecs[torch.arange(batch_size*candi_size).unsqueeze(1), candi_cls_idxs]
+                candi_cq_vecs = candi_cq_vecs.view(batch_size, candi_size, -1)
+
+                final_hidden = torch.cat([topic_vecs, avg_hist_cq_vecs, candi_cq_vecs, \
+                    batch_data.candi_retrieval_scores, batch_data.candi_scores_std], dim=-1)
+                if self.args.inter_embed_size == 1:
+                    scores = self.qpp_wo(final_hidden)
+                else:
+                    scores = self.qpp_wo2(torch.relu(self.qpp_wo1(final_hidden)))
+            else:
+                scores = self.mlp(topic_vecs)
+
 
         # batch_size * candi_size
         scores = scores.view(batch_size, candi_size)

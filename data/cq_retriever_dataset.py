@@ -100,7 +100,6 @@ class ClarifyQuestionDataset(Dataset):
         train_data = []
         # for hist_len in range(self.args.max_hist_turn):
         for hist_len in range(self.args.min_hist_turn, self.args.max_hist_turn):
-
             entries = self.select_neg_samples(prod_data, hist_len)
             for topic_facet_id, hist_cqs, pos_cq, other_cq, neg_cq in entries:
             # for topic_facet_id, hist_cqs, pos_cq, neg_cq in entries:
