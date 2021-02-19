@@ -125,7 +125,7 @@ class ClarifyQuestionRanker(nn.Module):
         ref_doc_words = batch_data.ref_doc_words.view(-1, doc_length)
         doc_token_masks = ref_doc_words.ne(self.pad_vid)
         cq_words_masks = candi_cq_words.ne(self.pad_vid)
-    
+
         query_vecs = self.bert(candi_cq_words, candi_seg_ids, cq_words_masks)
         # query_vecs is batch_size * candi_size, cq_words_len, embedding_size
         if self.args.model_name == "ref_transformer":
@@ -137,7 +137,7 @@ class ClarifyQuestionRanker(nn.Module):
             doc_token_masks = doc_token_masks.view(batch_size, ref_doc_count, -1)
             doc_token_masks = doc_token_masks.unsqueeze(1).expand(-1, candi_size, -1, -1)
             doc_token_masks = doc_token_masks.contiguous().view(batch_size * candi_size, ref_doc_count, -1)
-            
+
             scores = self.transformer_encoder(query_vecs, ref_doc_vecs, cq_words_masks, doc_token_masks)
         elif self.args.model_name == "plain_transformer":
             cls_vecs = query_vecs.view(batch_size, candi_size, seq_length, -1)[:,:,0,:]
