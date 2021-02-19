@@ -31,9 +31,9 @@ class ContextRanker(nn.Module):
         self.logsoftmax = torch.nn.LogSoftmax(dim=-1)
         self.projector = nn.Linear(self.embedding_size, self.args.projector_embed_size, bias=True)
         extra_dim = 2 * self.args.ql_doc_topk if self.args.model_name == "QPP" else "0"
-        self.linear1 = nn.Linear(self.args.projector_embed_size*2 + extra_dim, 4, bias=True)
+        self.linear1 = nn.Linear(self.args.projector_embed_size*2 + extra_dim, self.args.inter_embed_size, bias=True)
         # self.linear1 = nn.Linear(self.embedding_size*2, 4, bias=True)
-        self.linear2 = nn.Linear(4, 1, bias=True)
+        self.linear2 = nn.Linear(self.args.inter_embed_size, 1, bias=True)
         self.bias = torch.tensor(0., requires_grad=True).to(self.device)
         if not self.args.sep_selector:
             self.final_wo = nn.Linear(self.args.projector_embed_size, 1, bias=True)
