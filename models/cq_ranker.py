@@ -113,6 +113,7 @@ class ClarifyQuestionRanker(nn.Module):
         return candi_scores, candi_cq_mask
 
     def mlp(self, hidden_emb):
+        return self.wo(hidden_emb)
         if self.args.inter_embed_size == 1:
             scores = self.wo(hidden_emb)
         else:
@@ -134,7 +135,7 @@ class ClarifyQuestionRanker(nn.Module):
             # batch_size, ref_doc_count, doc_length
             ref_doc_words = batch_data.ref_doc_words.view(-1, doc_length)
             doc_token_masks = ref_doc_words.ne(self.pad_vid)
-    
+
             ref_doc_vecs = self.bert(ref_doc_words, mask=doc_token_masks)
             # batch_size * ref_doc_count, doc_len, embedding_size
             ref_doc_vecs = ref_doc_vecs.view(batch_size, ref_doc_count, doc_length, -1)

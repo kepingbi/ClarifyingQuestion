@@ -97,6 +97,7 @@ class RLTrainer(Trainer):
                 best_checkpoint_path = os.path.join(model_dir, 'model_best.ckpt')
                 logger.info("Copying %s to checkpoint %s" % (checkpoint_path, best_checkpoint_path))
                 shutil.copyfile(checkpoint_path, best_checkpoint_path)
+            os.remove(checkpoint_path)
 
         return best_checkpoint_path
 
