@@ -45,6 +45,8 @@ class ConvSearchData():
             read_score = True if args.mode == "baseline" else False
             self.all_candidate_cq_dic = global_data.read_topic_cq_ranklist(args.init_rankfile, read_score)
             for topic_facet_id in self.all_candidate_cq_dic:
+                # self.all_candidate_cq_dic[topic_facet_id] = \
+                #     [x for x in self.all_candidate_cq_dic[topic_facet_id] if x in self.candidate_cq_dic[topic_facet_id]]
                 self.all_candidate_cq_dic[topic_facet_id] = self.all_candidate_cq_dic[topic_facet_id][:self.args.rerank_topk]
             self.candidate_cq_dic = dict()
             for topic_facet_id in self.pos_cq_dic:
@@ -117,7 +119,7 @@ class GlobalConvSearchData():
         candi_doc_path = os.path.join(data_path, "candi_doc_dict.pt")
         stemmed_cq_path = os.path.join(data_path, "stemmed_questions_dict.pt")
         self.stemmed_cq_dic = torch.load(stemmed_cq_path)
-        candi_doc_psg_path = os.path.join(data_path, "candi_doc_psg_dict.pt")
+        # candi_doc_psg_path = os.path.join(data_path, "candi_doc_psg_dict.pt")
         qulac_path = os.path.join(data_path, "new_qulac.json")
         # topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "clarify_q_init_doc.mu1500.ranklist")
         topic_cq_doc_rankfile = os.path.join(data_path, "galago_index", "cq_top_doc_rerank50.ranklist")

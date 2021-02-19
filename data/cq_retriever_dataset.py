@@ -58,7 +58,6 @@ class ClarifyQuestionDataset(Dataset):
         # query, historical questiones+answers, cq candidates
         test_data = []
         candi_batch_size = self.args.candi_batch_size
-        topk = self.args.doc_topk
         # historical q from outside information.
         for topic_facet_id in candidate_cq_dic:
             # hist_cqs = hist_cq_dic[topic_facet_id] if hist_cq_dic is not None else []
@@ -74,18 +73,23 @@ class ClarifyQuestionDataset(Dataset):
             if len(candi_cq_list) == 0: #in case the candidate list is empty, query 115 doesn't matching any clarifying question. 
                 continue
             topic = topic_facet_id.split('-')[0]
-            doc_list = self.doc_diff(
-                global_data.cq_doc_rank_dic, global_data.cq_top_doc_info_dic, \
-                    topic, hist_cqs)
-            doc_list = doc_list[:topk]
-            cq_list = [cq for cq,score in global_data.cq_cq_rank_dic["%s-X" % topic]]
-            cq_list = [x for x in cq_list if x not in hist_cq_set]
-            cq_list = cq_list[:10]
+
+            stream_list = []
+            if self.args.info == "cq":
+                cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
+                cq_list = [x for x,y in cq_list if x not in hist_cq_set]
+                stream_list = cq_list[:self.args.cq_topk]
+            elif self.args.info == "doc":
+                # doc_list = self.doc_diff(
+                #     global_data.cq_doc_rank_dic, global_data.cq_top_doc_info_dic, \
+                #         topic, hist_cqs)
+                doc_list = [doc for doc,_ in global_data.cq_doc_rank_dic["%s-X" % topic]]
+                stream_list = doc_list[:self.args.doc_topk]
 
             seg_count = int((len(candi_cq_list) - 1) / candi_batch_size) + 1
             for i in range(seg_count):
                 # test_data.append([topic_facet_id, hist_cqs, doc_list,
-                test_data.append([topic_facet_id, hist_cqs, cq_list,
+                test_data.append([topic_facet_id, hist_cqs, stream_list,
                 candi_cq_list[i*candi_batch_size:(i+1)*candi_batch_size]])
 
         return test_data
@@ -93,9 +97,8 @@ class ClarifyQuestionDataset(Dataset):
 
     def collect_train_samples(self, global_data, prod_data):
         # query -> question+, question-
-        topk = self.args.doc_topk
-        candi_sim_wrt_tq_dic = global_data.collect_candidate_sim_wrt_tq(
-            prod_data.candidate_cq_dic, global_data.cq_cq_rank_dic)
+        # candi_sim_wrt_tq_dic = global_data.collect_candidate_sim_wrt_tq(
+        #     prod_data.candidate_cq_dic, global_data.cq_cq_rank_dic)
 
         train_data = []
         # for hist_len in range(self.args.max_hist_turn):
@@ -104,19 +107,24 @@ class ClarifyQuestionDataset(Dataset):
             for topic_facet_id, hist_cqs, pos_cq, other_cq, neg_cq in entries:
             # for topic_facet_id, hist_cqs, pos_cq, neg_cq in entries:
                 topic, _ = topic_facet_id.split('-')
-                # doc_list = self.doc_diff(
-                #     global_data.cq_doc_rank_dic, global_data.cq_top_doc_info_dic, \
-                #         topic, hist_cqs)
-                # doc_list = doc_list[:topk]
-                cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
-                cq_list = [x for x,y in cq_list if x not in set(hist_cqs)]
-                cq_list = cq_list[:self.args.cq_topk]
+                stream_list = []
+                if self.args.info == "cq":
+                    cq_list = global_data.cq_cq_rank_dic["%s-X" % topic]
+                    cq_list = [x for x,_ in cq_list if x not in set(hist_cqs)]
+                    stream_list = cq_list[:self.args.cq_topk]
+                elif self.args.info == "doc":
+                    # doc_list = self.doc_diff(
+                    #     global_data.cq_doc_rank_dic, global_data.cq_top_doc_info_dic, \
+                    #         topic, hist_cqs)
+                    doc_list = [doc for doc,_ in global_data.cq_doc_rank_dic["%s-X" % topic]]
+                    stream_list = doc_list[:self.args.doc_topk]
+
                 # if len(cq_list) == 0:
                 #     print(topic_facet_id)
                 # only calculate this for those with label 1
                 # other_cq_sim = self.cq_similarity(global_data.cq_doc_rank_dic, hist_cqs, other_cq)
                 # train_data.append([topic_facet_id, hist_cqs, doc_list, \
-                train_data.append([topic_facet_id, hist_cqs, cq_list, \
+                train_data.append([topic_facet_id, hist_cqs, stream_list, \
                     #  [pos_cq, other_cq, neg_cq], [4., 1.-other_cq_sim, 0.]])
                      [pos_cq, other_cq, neg_cq], [4., 1., 0.]])
         return train_data

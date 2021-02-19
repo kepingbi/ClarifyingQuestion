@@ -30,7 +30,8 @@ class ContextRanker(nn.Module):
         
         self.logsoftmax = torch.nn.LogSoftmax(dim=-1)
         self.projector = nn.Linear(self.embedding_size, self.args.projector_embed_size, bias=True)
-        self.linear1 = nn.Linear(self.args.projector_embed_size*2, 4, bias=True)
+        extra_dim = 2 * self.args.ql_doc_topk if self.args.model_name == "QPP" else "0"
+        self.linear1 = nn.Linear(self.args.projector_embed_size*2 + extra_dim, 4, bias=True)
         # self.linear1 = nn.Linear(self.embedding_size*2, 4, bias=True)
         self.linear2 = nn.Linear(4, 1, bias=True)
         self.bias = torch.tensor(0., requires_grad=True).to(self.device)
@@ -98,7 +99,11 @@ class ContextRanker(nn.Module):
                 mapped_hist_vecs = torch.relu(self.projector(hist_seq_vecs))
                 # pooled_vecs, _ = hist_seq_vecs.max(dim=2) # among all hist seq
                 pooled_vecs, _ = mapped_hist_vecs.max(dim=2) # among all hist seq
-                concat_vecs = torch.cat([mapped_topic_vecs, pooled_vecs], dim=-1)
+                if self.args.model_name == "QPP":
+                    concat_vecs = torch.cat([mapped_topic_vecs, pooled_vecs, 
+                     batch_data.candi_retrieval_scores, batch_data.candi_scores_std], dim=-1)
+                else:
+                    concat_vecs = torch.cat([mapped_topic_vecs, pooled_vecs], dim=-1)
                 scores = self.linear2(torch.relu(self.linear1(concat_vecs)))
             else:
                 if self.args.sep_selector:

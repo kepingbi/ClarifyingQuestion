@@ -37,6 +37,8 @@ def parse_args():
     parser.add_argument("--model_name", default='plain_transformer',
             choices=['ref_transformer', 'plain_transformer', 'avg_transformer', 'QPP'],
             help="which type of model is used to train")
+    parser.add_argument("--info", default='cq',
+            choices=["cq", 'doc'], help="Use which stream as extra information, only take effect when model is ref_transformer")
     parser.add_argument("--selector", default='none',
             choices=['ref', "wref", 'plain', "none"], help="which type of model is used as selector")
     parser.add_argument("--sel_struct", default='concat',
@@ -122,10 +124,10 @@ def parse_args():
     parser.add_argument("--scale_grad", action='store_true',
                             help="scale the grad of word and av embeddings.")
     parser.add_argument("--mode", type=str, default="train", choices=["train", "valid", "test", "baseline"])
-    parser.add_argument("--doc_topk", type=int, default=3,
+    parser.add_argument("--doc_topk", type=int, default=10,
                             help="The number of documents used for reference.")
-    parser.add_argument("--cq_topk", type=int, default=15,
-                            help="The number of documents used for reference.")
+    parser.add_argument("--cq_topk", type=int, default=10,
+                            help="The number of cq used for reference.")
     parser.add_argument("--words_topk", type=int, default=20,
                             help="The number of documents used for reference.")
     parser.add_argument("--rank_cutoff", type=int, default=5,
